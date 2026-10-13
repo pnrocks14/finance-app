@@ -1,0 +1,30 @@
+name: finance_app
+description: Private, offline-first personal finance app (Android first).
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  finance_core:
+    path: ../packages/finance_core
+  finance_data:
+    path: ../packages/finance_data
+  finance_ui_kit:
+    path: ../packages/finance_ui_kit
+  flutter_riverpod: ^3.4.3
+  go_router: ^18.0.2
+  local_auth: ^3.0.2
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
