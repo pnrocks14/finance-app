@@ -1,0 +1,43 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+**/doc/api/
+.flutter-plugins-dependencies
+pubspec_overrides.yaml
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+
+# Android
+app/android/.gradle/
+app/android/local.properties
+app/android/app/debug
+app/android/app/profile
+app/android/app/release
+app/android/**/gradle-wrapper.jar
+app/android/captures/
+*.keystore
+*.jks
+key.properties
+
+# Symbols and obfuscation maps
+app.*.symbols
+app.*.map.json
+
+# Secrets: never commit
+.env
+.env.*
+*.pem
+
+# Local tooling
+.widget_preview/
+migrate_working_dir/
