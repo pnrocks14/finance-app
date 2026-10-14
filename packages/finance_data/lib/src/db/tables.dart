@@ -59,6 +59,7 @@ class Accounts extends Table with RowMeta {
 }
 
 /// One statement import or one SMS backfill run, with its error report.
+@DataClassName('ImportBatch')
 class ImportBatches extends Table with RowMeta {
   TextColumn get kind =>
       text().map(const WireEnumConverter(ImportKind.values))();
@@ -111,6 +112,10 @@ class SourceRecords extends Table with RowMeta {
   name: 'transactions_amount_date',
   columns: {#amountPaise, #localDate},
 )
+@TableIndex(
+  name: 'transactions_account_date',
+  columns: {#accountId, #localDate},
+)
 class Transactions extends Table with RowMeta {
   TextColumn get accountId => text().nullable().references(Accounts, #id)();
   TextColumn get direction =>
@@ -146,6 +151,15 @@ class Transactions extends Table with RowMeta {
   RealColumn get categorizationConfidence => real().nullable()();
   TextColumn get flow =>
       text().map(const WireEnumConverter(TransactionFlow.values))();
+
+  /// Why [flow] has its value, for "see why". Added in schema 2.
+  TextColumn get flowReason => text()
+      .map(const WireEnumConverter(FlowReason.values))
+      .withDefault(const Constant('direction'))();
+
+  /// The other side of a transfer between your own accounts. Added in
+  /// schema 2.
+  TextColumn get transferPairId => text().nullable()();
   TextColumn get reconciliationStatus =>
       text().map(const WireEnumConverter(ReconciliationStatus.values))();
   TextColumn get notes => text().nullable()();
@@ -259,6 +273,7 @@ class Goals extends Table with RowMeta {
 }
 
 /// Detected subscriptions and other repeating charges.
+@DataClassName('RecurringSeriesRow')
 class RecurringSeries extends Table with RowMeta {
   TextColumn get merchantKey => text()();
   TextColumn get cadence =>
@@ -318,6 +333,7 @@ class PlanExtensions extends Table with RowMeta {
 
 /// Append-only, hash-chained record of every proposal event. Database
 /// triggers reject UPDATE and DELETE on this table.
+@DataClassName('AuditEntry')
 class AuditLog extends Table with RowMeta {
   /// 1, 2, 3, ... in the order entries were written.
   IntColumn get sequence => integer().unique()();

@@ -307,3 +307,28 @@ enum AuditEvent implements WireEnum {
   @override
   final String wire;
 }
+
+/// Why a transaction has its [TransactionFlow], for "see why".
+enum FlowReason implements WireEnum {
+  /// Debit means spend, credit means income.
+  direction('direction'),
+
+  /// A credit whose description reads like a refund or reversal.
+  refundKeyword('refund_keyword'),
+
+  /// A debit in one of your accounts matched a same-amount credit in another.
+  transferPair('transfer_pair'),
+
+  /// A credit card bill payment.
+  cardBill('card_bill'),
+
+  /// Paid to one of your own UPI handles.
+  ownVpa('own_vpa'),
+
+  /// You set it by hand. Never overwritten.
+  user('user');
+
+  const FlowReason(this.wire);
+  @override
+  final String wire;
+}

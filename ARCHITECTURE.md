@@ -64,20 +64,51 @@ can be generated and tested.
   constant-time compare. After 5 wrong tries the lockout starts at 30 s and doubles
   up to 1 h.
 
-## Main flows (planned)
+## Main flows
 
-### Import and reconcile (phase 2)
+### Statement import (phase 2, built)
 
 ```
-statement CSV/PDF ─┐
-                   ├─▶ parser (per bank) ─▶ source_records (deduped by hash)
-SMS inbox ─────────┘                              │
-                                                  ▼
-                                    matcher: same amount ± date window
-                                    ± reference ─▶ transactions
-                                                  │  (linked via transaction_sources)
-                                                  ▼
-                       unsure matches ─▶ reconciliation_reviews ─▶ user decides
+CSV bytes ─▶ decodeStatementBytes (UTF-8/16, Latin-1) ─▶ parseCsv (delimiter detected)
+          ─▶ detectLayout: header row + bank preset, or the column mapper on screen
+          ─▶ parseStatement: every line after the header becomes a row, an error,
+             a blank, or the footer (nothing is dropped silently)
+          ─▶ checkBalances: the running balance is a checksum (warnings only)
+          ─▶ StatementImporter.preview: how many rows are new
+          ─▶ StatementImporter.import, in one DB transaction:
+               import_batches (counts, errors, period)
+               source_records (one per new row, dedupeHash unique)
+               transactions + transaction_sources (description parsed)
+               detectTransfers over the period ±3 days, across all accounts
+```
+
+- **Parsing is pure Dart** in `finance_core/lib/src/import/`. Presets map header
+  spellings to fields. A bank without a preset falls back to generic header
+  names, then to the column mapper.
+- **Description parser:** turns narrations such as
+  `UPI-SWIGGY-swiggy@ybl-YESB0000001-412233445566-…` into the channel, payee, VPA,
+  UPI ref, bank code and merchant key. It also guesses merchant versus person from
+  the VPA and name.
+- **Dedupe:** `sha256(account | date | direction | amount | normalised description
+  | balance | occurrence)`. The occurrence number keeps two identical rows (two
+  ₹20 chai payments) as two transactions, while re-importing the file reproduces
+  the same hashes.
+- **Flow:** debits are spend and credits are income. Credits that read like a
+  refund or reversal are refunds. Transfer detection then marks transfers:
+  - debit and credit pairs of the same amount across your accounts, within 2 days
+  - credit card bill payments
+  - payments to your own UPI IDs
+
+  `flow_reason` records why, for "see why". A flow set by hand
+  (`flow_reason = user`) is never overwritten.
+- **Report excerpts** mask every run of 5 or more digits except the last 4.
+
+### Reconcile with SMS (phase 5)
+
+```
+SMS inbox ─▶ per-sender templates ─▶ source_records (deduped by hash)
+          ─▶ matcher: same amount ± date window ± reference ─▶ existing transaction
+          ─▶ unsure matches ─▶ reconciliation_reviews ─▶ user decides
 ```
 
 ### Categorisation (phase 3), fully on device
