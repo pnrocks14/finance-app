@@ -110,7 +110,10 @@ enum SpendClassSource implements WireEnum {
 
 enum SourceKind implements WireEnum {
   sms('sms'),
-  statementRow('statement_row');
+  statementRow('statement_row'),
+
+  /// A row from a UPI app's statement (PhonePe, Google Pay).
+  upiAppRow('upi_app_row');
 
   const SourceKind(this.wire);
   @override
@@ -304,6 +307,34 @@ enum AuditEvent implements WireEnum {
   proposalFailed('proposal_failed');
 
   const AuditEvent(this.wire);
+  @override
+  final String wire;
+}
+
+/// Why a transaction has its [TransactionFlow], for "see why".
+enum FlowReason implements WireEnum {
+  /// Debit means spend, credit means income.
+  direction('direction'),
+
+  /// A credit whose description reads like a refund or reversal.
+  refundKeyword('refund_keyword'),
+
+  /// A debit in one of your accounts matched a same-amount credit in another.
+  transferPair('transfer_pair'),
+
+  /// A credit card bill payment.
+  cardBill('card_bill'),
+
+  /// Paid to one of your own UPI handles.
+  ownVpa('own_vpa'),
+
+  /// A payment app's statement called it a self transfer.
+  selfTransfer('self_transfer'),
+
+  /// You set it by hand. Never overwritten.
+  user('user');
+
+  const FlowReason(this.wire);
   @override
   final String wire;
 }

@@ -6,20 +6,24 @@ up and categorised on the device, and turn into clear pictures of where the mont
 went. There is no server. AI is used only when you tap a button, and nothing it
 suggests changes your data until you approve it.
 
-Status: **Phase 1**. This covers the scaffold, the encrypted database, the app lock
-(PIN plus fingerprint), the design system and a style sheet screen. Imports, the
-categoriser, budgets and AI arrive in later phases. The plan lives in
+Status: **Phase 2** (statement import). Phase 1 built the scaffold, the encrypted
+database, the app lock (PIN plus fingerprint), the design system and a style sheet
+screen. Phase 2 adds CSV statement import with presets for HDFC, ICICI, SBI, Axis
+and Kotak (checked against a real Kotak export), a column mapper for other banks,
+Google Pay (PDF) and PhonePe (CSV) statements joined to bank rows by UPI
+reference, duplicate protection, transfer detection, an import report and a
+transactions list. Bank PDFs, the categoriser, SMS, budgets and AI arrive next. The plan lives in
 [the plan doc](https://claude.ai/code/artifact/d641d641-c3c2-44a0-8234-2bcf6671e465).
 
 ## Repository layout
 
 ```
 app/                     Flutter app (Android first)
-packages/finance_core/   Pure Dart domain: money, dates, ids, enums
-packages/finance_data/   Encrypted Drift database, secret store, PIN lock
+packages/finance_core/   Pure Dart domain: money, dates, ids, enums, statement parsing
+packages/finance_data/   Encrypted Drift database, importer, repositories, PIN lock
 packages/finance_ui_kit/ Design tokens, themes, shared components, font
 docs/adr/                Architecture decision records
-knowledge/               Reference notes (bank formats, guidelines)
+knowledge/               Reference notes (statement formats, guidelines)
 ```
 
 It is a [Dart pub workspace](https://dart.dev/tools/pub/workspaces), so one
@@ -74,6 +78,24 @@ output is at `app/build/app/outputs/flutter-apk/app-release.apk`.
 > The release build is currently signed with the Android **debug** key. That is
 > fine for sideloading onto your own phone. Before the app goes anywhere else it
 > needs a private release keystore, and that keystore must never be committed.
+
+## Importing a statement
+
+1. Get a statement:
+   - from net banking, your account statement as **CSV** (some banks call it
+     "delimited"), or
+   - from Google Pay, the transaction statement **PDF**, or
+   - from PhonePe, the statement **CSV**.
+2. In the app, tap the upload icon on home and choose the file. The app uses
+   Android's file picker, so it needs no storage permission and only sees the
+   file you pick.
+3. For a bank statement, pick or add its account. A Google Pay or PhonePe
+   statement covers several accounts and cards, so the preview shows where
+   each one's payments will go, and you can change it.
+4. Check the preview, then import. The report lists every row that couldn't be
+   read, with its line number and reason. Importing the same file again adds
+   nothing, and a payment that's in both a bank and an app statement is kept
+   once, with the app's payee name.
 
 ## Privacy and security
 

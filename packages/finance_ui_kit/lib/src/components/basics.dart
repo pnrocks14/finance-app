@@ -65,7 +65,9 @@ class PillButton extends StatelessWidget {
             children: [
               Icon(icon, size: 20),
               const SizedBox(width: Space.s),
-              Text(label),
+              // Shrinks with an ellipsis instead of overflowing on narrow
+              // screens, large text sizes and during page transitions.
+              Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
             ],
           );
     final button = switch (kind) {
