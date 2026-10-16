@@ -9,12 +9,16 @@ import '../../app/data_providers.dart';
 import '../../common/format.dart';
 import '../../common/widgets.dart';
 import '../accounts/add_account_sheet.dart';
+import 'app_statement_preview.dart';
 import 'column_mapper.dart';
 import 'import_report.dart';
+import 'pdf_text.dart';
 import 'statement_file_picker.dart';
 
-/// Statement import: pick the account, pick the file, check the preview,
-/// then import and read the report. Nothing is saved before "Import".
+/// Statement import: pick the file, then the account it belongs to (bank
+/// statements) or check which accounts its payments go to (PhonePe and
+/// Google Pay statements), check the preview, import and read the report.
+/// Nothing is saved before "Import".
 class ImportScreen extends ConsumerStatefulWidget {
   const ImportScreen({super.key});
 
@@ -22,17 +26,32 @@ class ImportScreen extends ConsumerStatefulWidget {
   ConsumerState<ImportScreen> createState() => _ImportScreenState();
 }
 
-enum _Step { account, file, mapColumns, preview, importing, report }
+enum _Step {
+  file,
+  reading,
+  account,
+  mapColumns,
+  preview,
+  appPreview,
+  importing,
+  report,
+}
 
 class _ImportScreenState extends ConsumerState<ImportScreen> {
-  _Step _step = _Step.account;
+  _Step _step = _Step.file;
   Account? _account;
   String? _fileName;
   String? _text;
   List<List<String>> _table = const [];
   ImportPreview? _preview;
+  AppImportPreview? _appPreview;
   ImportOutcome? _outcome;
   String? _error;
+
+  static bool _isPdf(PickedStatement file) =>
+      file.name.toLowerCase().endsWith('.pdf') ||
+      file.bytes.length > 4 &&
+          String.fromCharCodes(file.bytes.take(5)) == '%PDF-';
 
   Future<void> _pickFile() async {
     setState(() => _error = null);
@@ -44,11 +63,69 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       return;
     }
     if (picked == null) return;
-    final text = decodeStatementBytes(picked.bytes);
     _fileName = picked.name;
+    if (_isPdf(picked)) {
+      await _readPdf(picked);
+      return;
+    }
+    final text = decodeStatementBytes(picked.bytes);
     _text = text;
-    final delimiter = detectDelimiter(text);
-    _table = parseCsv(text, delimiter: delimiter);
+    _table = parseCsv(text, delimiter: detectDelimiter(text));
+    if (looksLikePhonePeCsv(_table)) {
+      await _buildAppPreview(parsePhonePeCsv(text));
+      return;
+    }
+    setState(() => _step = _Step.account);
+  }
+
+  Future<void> _readPdf(PickedStatement file) async {
+    setState(() => _step = _Step.reading);
+    String? text;
+    String? error;
+    try {
+      text = await ref.read(pdfTextExtractorProvider).extract(file.bytes);
+    } on PdfPasswordRequired {
+      error =
+          'That PDF is locked with a password. Password-protected '
+          'statements are coming soon. For now, download a CSV instead.';
+    } on Object {
+      error = "That PDF couldn't be opened.";
+    }
+    if (text != null && !looksLikeGooglePayText(text)) {
+      error =
+          'Only Google Pay PDF statements can be read so far. For a bank '
+          'statement, download it as CSV from net banking.';
+    }
+    if (error != null || text == null) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _step = _Step.file;
+      });
+      return;
+    }
+    await _buildAppPreview(parseGooglePayText(text));
+  }
+
+  Future<void> _buildAppPreview(AppStatementResult result) async {
+    if (result.rows.isEmpty) {
+      setState(() {
+        _error = 'No payments were found in that file.';
+        _step = _Step.file;
+      });
+      return;
+    }
+    final importer = await ref.read(appStatementImporterProvider.future);
+    final preview = await importer.preview(result);
+    if (!mounted) return;
+    setState(() {
+      _appPreview = preview;
+      _step = _Step.appPreview;
+    });
+  }
+
+  Future<void> _chooseAccount(Account account) async {
+    _account = account;
     final layout = detectLayout(_table);
     if (layout == null) {
       setState(() => _step = _Step.mapColumns);
@@ -80,6 +157,24 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     });
   }
 
+  Future<void> _importApp(Map<String, String?> accounts) async {
+    setState(() => _step = _Step.importing);
+    final importer = await ref.read(appStatementImporterProvider.future);
+    final result = _appPreview!.result;
+    final outcome = await importer.import(
+      result: result,
+      accounts: accounts,
+      kind: result.app == UpiApp.googlePay
+          ? ImportKind.statementPdf
+          : ImportKind.statementCsv,
+    );
+    if (!mounted) return;
+    setState(() {
+      _outcome = outcome;
+      _step = _Step.report;
+    });
+  }
+
   Future<void> _import() async {
     setState(() => _step = _Step.importing);
     final importer = await ref.read(statementImporterProvider.future);
@@ -97,6 +192,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   void _startOver() => setState(() {
     _step = _Step.file;
     _preview = null;
+    _appPreview = null;
     _outcome = null;
     _text = null;
     _fileName = null;
@@ -106,10 +202,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     final title = switch (_step) {
-      _Step.account => 'Import a statement',
-      _Step.file => 'Choose the file',
+      _Step.file => 'Import a statement',
+      _Step.reading => 'Reading the file',
+      _Step.account => 'Which account?',
       _Step.mapColumns => 'Match the columns',
-      _Step.preview => 'Check before importing',
+      _Step.preview || _Step.appPreview => 'Check before importing',
       _Step.importing => 'Importing',
       _Step.report => 'Import done',
     };
@@ -117,18 +214,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: switch (_step) {
+          _Step.file => _FileStep(error: _error, onPick: _pickFile),
+          _Step.reading ||
+          _Step.importing => const Center(child: CircularProgressIndicator()),
           _Step.account => _AccountStep(
             selected: _account,
-            onSelect: (a) => setState(() {
-              _account = a;
-              _step = _Step.file;
-            }),
-          ),
-          _Step.file => _FileStep(
-            account: _account!,
-            error: _error,
-            onPick: _pickFile,
-            onChangeAccount: () => setState(() => _step = _Step.account),
+            onSelect: _chooseAccount,
           ),
           _Step.mapColumns => ColumnMapper(
             table: _table,
@@ -142,9 +233,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             onImport: _import,
             onCancel: _startOver,
           ),
-          _Step.importing => const Center(child: CircularProgressIndicator()),
+          _Step.appPreview => AppStatementPreview(
+            fileName: _fileName!,
+            preview: _appPreview!,
+            onImport: _importApp,
+            onCancel: _startOver,
+          ),
           _Step.report => ImportReport(
             outcome: _outcome!,
+            rowLabel: _appPreview?.result.app == UpiApp.googlePay
+                ? 'Entry'
+                : 'Line',
             onDone: () => context.go('/transactions'),
             onImportAnother: _startOver,
           ),
@@ -176,7 +275,10 @@ class _AccountStep extends ConsumerWidget {
       data: (list) => ListView(
         padding: const EdgeInsets.all(Space.screen),
         children: [
-          Text('Which account is this statement for?', style: theme.titleLarge),
+          Text(
+            'Which account is this statement from?',
+            style: theme.titleLarge,
+          ),
           const SizedBox(height: Space.l),
           if (list.isEmpty)
             EmptyState(
@@ -236,17 +338,10 @@ class _AccountStep extends ConsumerWidget {
 }
 
 class _FileStep extends StatelessWidget {
-  const _FileStep({
-    required this.account,
-    required this.error,
-    required this.onPick,
-    required this.onChangeAccount,
-  });
+  const _FileStep({required this.error, required this.onPick});
 
-  final Account account;
   final String? error;
   final VoidCallback onPick;
-  final VoidCallback onChangeAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -255,35 +350,34 @@ class _FileStep extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(Space.screen),
       children: [
-        AppCard(
-          soft: true,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Importing into ${account.displayName}',
-                  style: theme.titleMedium,
-                ),
-              ),
-              TextButton(
-                onPressed: onChangeAccount,
-                child: const Text('Change'),
-              ),
-            ],
-          ),
+        Text('Choose a statement', style: theme.titleLarge),
+        const SizedBox(height: Space.s),
+        Text('These work today:', style: theme.bodyMedium),
+        const SizedBox(height: Space.s),
+        const _Source(
+          icon: Icons.account_balance_outlined,
+          title: 'Bank statement (CSV)',
+          detail:
+              'In net banking, open your account statement, pick the dates '
+              'and download it as CSV (sometimes called "delimited").',
         ),
-        const SizedBox(height: Space.xl),
-        Text('Download a CSV from your bank', style: theme.titleLarge),
+        const _Source(
+          icon: Icons.qr_code_rounded,
+          title: 'Google Pay (PDF) or PhonePe (CSV)',
+          detail:
+              'From the app, request your transaction statement. It covers '
+              'every bank account and card you pay from.',
+        ),
         const SizedBox(height: Space.s),
         Text(
-          'In net banking, open your account statement, pick the dates, and '
-          'download it as CSV (sometimes called "delimited"). Then choose '
-          'that file here. The file is read on this phone and never uploaded.',
-          style: theme.bodyMedium,
+          'The file is read on this phone and never uploaded. Payments that '
+          'show up in both a bank and an app statement are joined, not '
+          'counted twice.',
+          style: theme.bodySmall,
         ),
         const SizedBox(height: Space.xl),
         PillButton(
-          label: 'Choose CSV file',
+          label: 'Choose file',
           icon: Icons.upload_file_rounded,
           expand: true,
           onPressed: onPick,
@@ -292,12 +386,47 @@ class _FileStep extends StatelessWidget {
           const SizedBox(height: Space.m),
           Text(error!, style: theme.bodyMedium?.copyWith(color: c.over)),
         ],
-        const SizedBox(height: Space.l),
-        Text(
-          'PDF and Excel statements are coming next.',
-          style: theme.bodySmall,
-        ),
       ],
+    );
+  }
+}
+
+class _Source extends StatelessWidget {
+  const _Source({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.s),
+      child: AppCard(
+        soft: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: context.colors.primary),
+            const SizedBox(width: Space.m),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.titleMedium),
+                  const SizedBox(height: Space.xs),
+                  Text(detail, style: theme.bodySmall),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

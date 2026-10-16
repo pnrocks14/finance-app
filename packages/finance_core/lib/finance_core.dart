@@ -12,6 +12,7 @@ export 'src/import/description_parser.dart';
 export 'src/import/statement_csv.dart';
 export 'src/import/statement_date.dart';
 export 'src/import/transfers.dart';
+export 'src/import/upi_app_statement.dart';
 export 'src/models/enums.dart';
 export 'src/money/inr_format.dart';
 export 'src/money/paise.dart';

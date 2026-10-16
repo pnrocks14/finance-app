@@ -26,8 +26,9 @@ class AccountsRepository {
     String? last4,
     List<String> upiHandles = const [],
   }) async {
-    if (last4 != null && !RegExp(r'^\d{4}$').hasMatch(last4)) {
-      throw ArgumentError.value(last4, 'last4', 'Must be four digits');
+    // Payment apps sometimes show only the last two digits of a card.
+    if (last4 != null && !RegExp(r'^\d{2,4}$').hasMatch(last4)) {
+      throw ArgumentError.value(last4, 'last4', 'Must be 2 to 4 digits');
     }
     final now = _clock().toUtc();
     final row = AccountsCompanion.insert(

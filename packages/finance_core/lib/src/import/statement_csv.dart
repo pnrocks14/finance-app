@@ -306,7 +306,8 @@ enum RowProblem {
   bothAmounts('The row has both a debit and a credit'),
   zeroAmount('The amount is zero'),
   missingDescription('The description is empty'),
-  tooFewColumns('The row has fewer columns than the header');
+  tooFewColumns('The row has fewer columns than the header'),
+  unknownType('The row is not a payment, a receipt or a transfer');
 
   const RowProblem(this.message);
   final String message;

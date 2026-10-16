@@ -144,16 +144,25 @@ void main() {
     expect(hdfcSide.transferPairId, isNull);
   });
 
-  test('account last4 must be four digits', () async {
-    expect(
-      () => accounts.create(
-        kind: AccountKind.bankAccount,
-        institution: 'X',
-        displayName: 'X',
-        last4: '12',
-      ),
-      throwsArgumentError,
+  test('account last4 must be 2 to 4 digits', () async {
+    for (final bad in ['1', '12345', '12a4']) {
+      expect(
+        () => accounts.create(
+          kind: AccountKind.bankAccount,
+          institution: 'X',
+          displayName: 'X',
+          last4: bad,
+        ),
+        throwsArgumentError,
+      );
+    }
+    final card = await accounts.create(
+      kind: AccountKind.creditCard,
+      institution: 'X',
+      displayName: 'X',
+      last4: '65',
     );
+    expect(card.last4, '65');
   });
 
   test('transactions repository lists newest first and by month', () async {

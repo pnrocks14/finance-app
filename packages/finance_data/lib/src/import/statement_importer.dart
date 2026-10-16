@@ -2,15 +2,17 @@ import 'package:drift/drift.dart';
 import 'package:finance_core/finance_core.dart';
 
 import '../db/database.dart';
+import 'ledger_links.dart';
 
 /// What an import did, for the import report screen. Every line of the file
-/// after the header is counted in exactly one of [created], [duplicates],
-/// [failed] or blank lines, so the numbers always add up.
+/// after the header is counted in exactly one of [created], [matched],
+/// [duplicates], [failed] or blank lines, so the numbers always add up.
 final class ImportOutcome {
   const ImportOutcome({
     required this.batchId,
     required this.created,
     required this.duplicates,
+    this.matched = 0,
     required this.errors,
     required this.balanceWarnings,
     required this.transfersMarked,
@@ -19,6 +21,10 @@ final class ImportOutcome {
   final String batchId;
   final int created;
   final int duplicates;
+
+  /// Rows joined to a transaction another source already created (a bank
+  /// row and the payment app's row for the same UPI payment).
+  final int matched;
   final List<RowError> errors;
   final List<BalanceWarning> balanceWarnings;
   final int transfersMarked;
@@ -89,18 +95,26 @@ class StatementImporter {
       final existing = await _existingHashes(hashes);
       var created = 0;
       var duplicates = 0;
+      var matched = 0;
       for (var i = 0; i < result.rows.length; i++) {
         if (existing.contains(hashes[i])) {
           duplicates++;
           continue;
         }
-        await _insertRow(accountId, batchId, hashes[i], result.rows[i], now);
-        created++;
+        final linked = await _insertRow(
+          accountId,
+          batchId,
+          hashes[i],
+          result.rows[i],
+          now,
+        );
+        linked ? matched++ : created++;
       }
 
       final transfers = result.rows.isEmpty
           ? 0
-          : await _markTransfers(
+          : await markTransfers(
+              _db,
               result.periodFrom!.addDays(-transferSearchDays),
               result.periodTo!.addDays(transferSearchDays),
               now,
@@ -114,6 +128,7 @@ class StatementImporter {
           parsedCount: Value(result.rows.length),
           failedCount: Value(result.errors.length),
           duplicateCount: Value(duplicates),
+          matchedCount: Value(matched),
           createdCount: Value(created),
           errors: Value([
             for (final e in result.errors) e.toJson(),
@@ -127,6 +142,7 @@ class StatementImporter {
         batchId: batchId,
         created: created,
         duplicates: duplicates,
+        matched: matched,
         errors: result.errors,
         balanceWarnings: result.balanceWarnings,
         transfersMarked: transfers,
@@ -148,7 +164,10 @@ class StatementImporter {
     return found;
   }
 
-  Future<void> _insertRow(
+  /// Saves the row as evidence, then joins it to the transaction a payment
+  /// app's statement already created for it, or creates a new one. Returns
+  /// true when it was joined.
+  Future<bool> _insertRow(
     String accountId,
     String batchId,
     String hash,
@@ -158,7 +177,6 @@ class StatementImporter {
     final parsed = parseDescription(row.description);
     final (flow, reason) = defaultFlow(row.direction, row.description);
     final recordId = newId();
-    final txId = newId();
 
     await _db
         .into(_db.sourceRecords)
@@ -186,6 +204,36 @@ class StatementImporter {
           ),
         );
 
+    final existing = parsed.upiRef == null
+        ? null
+        : await findByUpiRef(
+            _db,
+            upiRef: parsed.upiRef!,
+            direction: row.direction,
+            amount: row.amount,
+            kind: SourceKind.statementRow,
+          );
+    if (existing != null) {
+      // The app's payee name and exact time are kept. The bank statement
+      // decides the account and adds its narration and reference.
+      await (_db.update(
+        _db.transactions,
+      )..where((t) => t.id.equals(existing.id))).write(
+        TransactionsCompanion(
+          accountId: Value(accountId),
+          descriptionRaw: Value(row.description),
+          bankRef: Value(existing.bankRef ?? parsed.bankRef),
+          vpa: Value(existing.vpa ?? parsed.vpa),
+          reconciliationStatus: const Value(ReconciliationStatus.matched),
+          updatedAt: Value(now),
+          version: Value(existing.version + 1),
+        ),
+      );
+      await _link(existing.id, recordId, now);
+      return true;
+    }
+
+    final txId = newId();
     await _db
         .into(_db.transactions)
         .insert(
@@ -214,78 +262,20 @@ class StatementImporter {
             reconciliationStatus: ReconciliationStatus.single,
           ),
         );
-
-    await _db
-        .into(_db.transactionSources)
-        .insert(
-          TransactionSourcesCompanion.insert(
-            id: newId(),
-            createdAt: now,
-            updatedAt: now,
-            transactionId: txId,
-            sourceRecordId: recordId,
-            kind: SourceKind.statementRow,
-          ),
-        );
+    await _link(txId, recordId, now);
+    return false;
   }
 
-  /// Re-runs transfer detection over a date range of the whole ledger, so a
-  /// second account's statement can complete a pair with the first.
-  /// Transactions you changed by hand are left alone. Returns how many
-  /// transactions changed.
-  Future<int> _markTransfers(LocalDate from, LocalDate to, DateTime now) async {
-    final accounts = {
-      for (final a in await _db.select(_db.accounts).get()) a.id: a,
-    };
-    final ownVpas = {
-      for (final a in accounts.values)
-        for (final h in a.upiHandles) h.toString(),
-    };
-    final txs =
-        await (_db.select(_db.transactions)..where(
-              (t) =>
-                  t.localDate.isBetweenValues(from.toIso(), to.toIso()) &
-                  t.deletedAt.isNull() &
-                  t.flowReason.equals(FlowReason.user.wire).not(),
-            ))
-            .get();
-    final matches = detectTransfers([
-      for (final t in txs)
-        TransferCandidate(
-          id: t.id,
-          accountId: t.accountId,
-          accountKind: accounts[t.accountId]?.kind,
-          direction: t.direction,
-          amount: Paise(t.amountPaise),
-          date: t.localDate,
-          description: t.descriptionRaw ?? '',
-          vpa: t.vpa,
-        ),
-    ], ownVpas: ownVpas);
-
-    var changed = 0;
-    for (final t in txs) {
-      final m = matches[t.id];
-      if (m == null) continue;
-      if (t.flow == TransactionFlow.transfer &&
-          t.flowReason == m.reason &&
-          t.transferPairId == m.counterpartId) {
-        continue;
-      }
-      await (_db.update(
-        _db.transactions,
-      )..where((x) => x.id.equals(t.id))).write(
-        TransactionsCompanion(
-          flow: const Value(TransactionFlow.transfer),
-          flowReason: Value(m.reason),
-          transferPairId: Value(m.counterpartId),
-          counterpartyKind: const Value(CounterpartyKind.self),
-          updatedAt: Value(now),
-          version: Value(t.version + 1),
+  Future<void> _link(String txId, String recordId, DateTime now) => _db
+      .into(_db.transactionSources)
+      .insert(
+        TransactionSourcesCompanion.insert(
+          id: newId(),
+          createdAt: now,
+          updatedAt: now,
+          transactionId: txId,
+          sourceRecordId: recordId,
+          kind: SourceKind.statementRow,
         ),
       );
-      changed++;
-    }
-    return changed;
-  }
 }

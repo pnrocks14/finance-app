@@ -82,7 +82,8 @@ const _bankCodes = {
   'UBIN', 'IDIB', 'IOBA', 'INDB', 'IDFB', 'FDRL', 'AUBL', 'PYTM', 'AIRP',
   'JIOP', 'RATN', 'BKID', 'MAHB', 'CBIN', 'UCBA', 'PSIB', 'SCBL', 'CITI',
   'HSBC', 'DBSS', 'KARB', 'KVBL', 'SIBL', 'TMBL', 'CSBK', 'DLXB', 'ESFB',
-  'UJVN', 'FINO', 'NSPB',
+  'UJVN', 'FINO', 'NSPB', 'IPOS', 'MAHG', 'APGB', 'ABHY', 'COSB', 'SVCB',
+  'TJSB', 'BDBL', 'KSCB', 'PJSB', 'SRCB', 'IBKL', 'USFB', 'SURY', 'JSFB',
 };
 
 /// VPA patterns that belong to merchants rather than people.
@@ -100,12 +101,46 @@ final _companyName = RegExp(
   caseSensitive: false,
 );
 
+/// Interest credited by the bank: `Int.Pd:1234567890:01-07-2026 to …`,
+/// `CREDIT INTEREST`, `SB INT`.
+final _interest = RegExp(
+  r'^(int\.?\s*pd\b|int\.?\s*paid\b|interest\b|credit\s*interest|'
+  r'sb\s*int\b|int\.?\s*credit)',
+  caseSensitive: false,
+);
+
+/// Fees: `CHRG:SMS ALERT FEE FOR THE MONTH OF JUN26`, `SMS CHARGES`,
+/// `DEBIT CARD ANNUAL FEE`, `MIN BAL CHGS`.
+final _charges = RegExp(
+  r'^(chrg\b|chgs?\b|charges?\b)|\b(sms\s*(alert|chg|charges)|annual\s*fee|'
+  r'min(imum)?\s*bal(ance)?\s*(chg|charge)|non\s*maint)',
+  caseSensitive: false,
+);
+
 /// Turns a bank narration into channel, payee, VPA and references.
 /// Never throws; unknown formats come back as [Channel.other] with the
 /// cleaned text as the payee.
 ParsedDescription parseDescription(String raw) {
   final text = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
   final upper = text.toUpperCase();
+
+  // The bank's own entries: interest paid to you and fees it charged.
+  if (_interest.hasMatch(text)) {
+    return const ParsedDescription(
+      channel: Channel.other,
+      counterpartyName: 'Interest',
+      merchantKey: 'bank_interest',
+      counterpartyKind: CounterpartyKind.merchant,
+    );
+  }
+  if (!upper.startsWith('UPI') && _charges.hasMatch(text)) {
+    return const ParsedDescription(
+      channel: Channel.other,
+      counterpartyName: 'Bank charges',
+      merchantKey: 'bank_charges',
+      counterpartyKind: CounterpartyKind.merchant,
+    );
+  }
 
   if (_startsWithAny(upper, const [
         'UPI',
@@ -147,6 +182,20 @@ ParsedDescription parseDescription(String raw) {
     return _parseNamedOther(text, Channel.netBanking);
   }
   return _parseNamedOther(text, Channel.other);
+}
+
+/// Merchant key and kind for a payee a payment app names in full
+/// (`SHARMA DAIRY`, `Flipkart Payments`). App statements have no narration
+/// to pick apart, only the name.
+ParsedDescription parsePayee(String name, {String? upiRef}) {
+  final clean = _cleanName(name);
+  return ParsedDescription(
+    channel: Channel.upi,
+    counterpartyName: clean.isEmpty ? null : clean,
+    upiRef: upiRef,
+    merchantKey: _merchantKey(clean, null),
+    counterpartyKind: _kindOf(clean, null),
+  );
 }
 
 bool _startsWithAny(String s, List<String> prefixes) =>

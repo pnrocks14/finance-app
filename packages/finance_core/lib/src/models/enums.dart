@@ -110,7 +110,10 @@ enum SpendClassSource implements WireEnum {
 
 enum SourceKind implements WireEnum {
   sms('sms'),
-  statementRow('statement_row');
+  statementRow('statement_row'),
+
+  /// A row from a UPI app's statement (PhonePe, Google Pay).
+  upiAppRow('upi_app_row');
 
   const SourceKind(this.wire);
   @override
@@ -324,6 +327,9 @@ enum FlowReason implements WireEnum {
 
   /// Paid to one of your own UPI handles.
   ownVpa('own_vpa'),
+
+  /// A payment app's statement called it a self transfer.
+  selfTransfer('self_transfer'),
 
   /// You set it by hand. Never overwritten.
   user('user');

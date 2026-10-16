@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:finance_app/app/providers.dart';
+import 'package:finance_app/features/import/pdf_text.dart';
 import 'package:finance_app/features/import/statement_file_picker.dart';
 import 'package:finance_core/finance_core.dart';
 import 'package:finance_data/finance_data.dart';
@@ -16,13 +17,50 @@ Date,Narration,Chq./Ref.No.,Value Dt,Withdrawal Amt.,Deposit Amt.,Closing Balanc
 xx/10/26,BROKEN ROW,,,10.00,,
 ''';
 
+// Made-up Google Pay statement text, as PDFium extracts it.
+const _gpay = '''
+Transaction statement
+Sent
+₹1,020
+Received
+₹0
+Date & time Transaction details Amount
+01 Jul, 2026
+09:46 AM
+Paid to TEA STALL OWNER NAME
+UPI Transaction ID: 611122223333
+Paid by Kotak Mahindra Bank 7890
+₹20
+08 Jul, 2026
+09:46 AM
+Self transfer to India Post Payment Bank 4321
+UPI Transaction ID: 633344445555
+Paid by Kotak Mahindra Bank 7890
+₹300
+08 Jul, 2026
+01:08 PM
+Paid to Udupi Flavours
+UPI Transaction ID: 677788889999
+Paid by Unity Small Finance Bank Ltd XX65 | RuPay credit card
+₹1,000
+''';
+
 class FakePicker implements StatementFilePicker {
-  FakePicker(this.text);
+  FakePicker(this.text, {this.name = 'october.csv'});
   final String text;
+  final String name;
 
   @override
   Future<PickedStatement?> pick() async =>
-      PickedStatement(name: 'october.csv', bytes: utf8.encode(text));
+      PickedStatement(name: name, bytes: utf8.encode(text));
+}
+
+class FakePdfText implements PdfTextExtractor {
+  FakePdfText(this.text);
+  final String text;
+
+  @override
+  Future<String> extract(List<int> bytes) async => text;
 }
 
 void main() {
@@ -39,17 +77,15 @@ void main() {
     expect(find.text('Your money, all in one place'), findsOneWidget);
     await tester.tap(find.text('Import a statement'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
 
-    // No accounts yet: add one.
+    // A bank CSV needs its account. There are none yet: add one.
     await tester.tap(find.text('Add an account'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('HDFC Bank'));
     await tester.pump();
     await tester.tap(find.text('Add account'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Importing into HDFC Savings'), findsOneWidget);
-    await tester.tap(find.text('Choose CSV file'));
     await tester.pumpAndSettle();
 
     expect(find.text('october.csv'), findsOneWidget);
@@ -91,10 +127,80 @@ void main() {
 
     await tester.tap(find.byTooltip('Import a statement'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('HDFC Savings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose CSV file'));
-    await tester.pumpAndSettle();
     expect(find.text('Nothing new to import'), findsOneWidget);
+  });
+
+  testWidgets('a Google Pay PDF fills several accounts at once', (
+    tester,
+  ) async {
+    final store = MemorySecretStore();
+    await PinLock(store, iterations: 1000).setPin('4826');
+    final container = testContainer(
+      store,
+      picker: FakePicker('%PDF-1.7', name: 'gpay.pdf'),
+      pdfText: FakePdfText(_gpay),
+    );
+    addTearDown(container.dispose);
+    final db = await container.read(databaseProvider.future);
+    await AccountsRepository(db).create(
+      kind: AccountKind.bankAccount,
+      institution: 'Kotak Mahindra Bank',
+      displayName: 'Kotak Savings',
+    );
+
+    await pumpApp(tester, container);
+    await typePin(tester, '4826');
+    await tester.tap(find.text('Import a statement'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
+    expect(find.text('gpay.pdf'), findsOneWidget);
+    expect(find.textContaining('Google Pay statement'), findsOneWidget);
+    expect(
+      find.text('Adds up to the totals on the statement.'),
+      findsOneWidget,
+    );
+    expect(find.text('Kotak Mahindra Bank ••7890'), findsOneWidget);
+    expect(find.text('Kotak Savings'), findsOneWidget);
+    expect(find.text('Unity Small Finance Bank Ltd ••65'), findsOneWidget);
+    expect(find.text('Add as a new account'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Import 3 payments'), 200);
+    await tester.tap(find.text('Import 3 payments'));
+    await tester.pumpAndSettle();
+    expect(find.text('3'), findsOneWidget);
+    await tester.tap(find.text('See transactions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Udupi Flavours'), findsOneWidget);
+    final accounts = await AccountsRepository(db).all();
+    expect(accounts.map((a) => a.last4).toSet(), {'7890', '65'});
+  });
+
+  testWidgets('a PDF that is not a Google Pay statement is turned away', (
+    tester,
+  ) async {
+    final store = MemorySecretStore();
+    await PinLock(store, iterations: 1000).setPin('4826');
+    final container = testContainer(
+      store,
+      picker: FakePicker('%PDF-1.7', name: 'bank.pdf'),
+      pdfText: FakePdfText('Statement of account\nOpening balance 100.00'),
+    );
+    addTearDown(container.dispose);
+    await pumpApp(tester, container);
+    await typePin(tester, '4826');
+    await tester.tap(find.text('Import a statement'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Only Google Pay PDF statements'),
+      findsOneWidget,
+    );
   });
 }

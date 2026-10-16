@@ -24,7 +24,7 @@ class SystemStatementFilePicker implements StatementFilePicker {
   Future<PickedStatement?> pick() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['csv', 'txt', 'tsv'],
+      allowedExtensions: const ['csv', 'txt', 'tsv', 'pdf'],
     );
     if (file == null) return null;
     final size = await file.length();

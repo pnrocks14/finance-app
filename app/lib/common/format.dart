@@ -65,5 +65,8 @@ String flowReasonText(FlowReason r) => switch (r) {
         'when you make them, so the bill itself is a transfer.',
   FlowReason.ownVpa =>
     'This went to one of your own UPI IDs, so it is a transfer.',
+  FlowReason.selfTransfer =>
+    'Your payment app listed this as a self transfer between your own '
+        'accounts, so it is not counted as spending or income.',
   FlowReason.user => 'You set this yourself.',
 };

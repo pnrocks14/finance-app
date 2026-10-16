@@ -96,12 +96,37 @@ CSV bytes ─▶ decodeStatementBytes (UTF-8/16, Latin-1) ─▶ parseCsv (delim
 - **Flow:** debits are spend and credits are income. Credits that read like a
   refund or reversal are refunds. Transfer detection then marks transfers:
   - debit and credit pairs of the same amount across your accounts, within 2 days
-  - credit card bill payments
+    (and the same UPI reference when both sides have one)
+  - credit card bill payments, including payments to the bank behind one of
+    your cards
   - payments to your own UPI IDs
+  - self transfers named in a payment app's statement
 
   `flow_reason` records why, for "see why". A flow set by hand
   (`flow_reason = user`) is never overwritten.
 - **Report excerpts** mask every run of 5 or more digits except the last 4.
+
+### UPI app statements (phase 2, built)
+
+```
+Google Pay PDF ─▶ PDFium text (pdfrx) ─▶ parseGooglePayText ─┐
+PhonePe CSV ─────────────────────────▶ parsePhonePeCsv ──────┤
+                                                             ▼
+        rows with payee, exact time, UPI ref and instrument ("Kotak … 7890")
+          ─▶ AppStatementImporter.preview: instrument → account suggestions
+          ─▶ import, in one DB transaction:
+               source_records (kind upi_app_row)
+               same UPI ref + direction + amount already in the ledger?
+                 yes: join it (app payee and time, bank account and narration)
+                 no:  new transaction in the instrument's account
+               detectTransfers over the period
+```
+
+- The bank importer joins the other way too, so the import order doesn't
+  matter (ADR 0007).
+- Google Pay's PDF text is read field by field inside each dated entry, so it
+  doesn't depend on the extractor's text order. Its printed totals are a
+  checksum.
 
 ### Reconcile with SMS (phase 5)
 

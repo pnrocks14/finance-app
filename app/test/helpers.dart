@@ -1,6 +1,7 @@
 import 'package:finance_app/app/data_providers.dart';
 import 'package:finance_app/app/finance_app.dart';
 import 'package:finance_app/app/providers.dart';
+import 'package:finance_app/features/import/pdf_text.dart';
 import 'package:finance_app/features/import/statement_file_picker.dart';
 import 'package:finance_app/features/lock/biometric_auth.dart';
 import 'package:finance_data/finance_data.dart';
@@ -31,9 +32,11 @@ ProviderContainer testContainer(
   MemorySecretStore store, {
   BiometricAuth? biometric,
   StatementFilePicker? picker,
+  PdfTextExtractor? pdfText,
 }) => ProviderContainer(
   overrides: [
     if (picker != null) statementFilePickerProvider.overrideWithValue(picker),
+    if (pdfText != null) pdfTextExtractorProvider.overrideWithValue(pdfText),
     secretStoreProvider.overrideWithValue(store),
     pinLockProvider.overrideWithValue(PinLock(store, iterations: 1000)),
     biometricAuthProvider.overrideWithValue(biometric ?? FakeBiometric()),

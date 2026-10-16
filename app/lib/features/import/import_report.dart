@@ -13,9 +13,13 @@ class ImportReport extends StatelessWidget {
     required this.outcome,
     required this.onDone,
     required this.onImportAnother,
+    this.rowLabel = 'Line',
   });
 
   final ImportOutcome outcome;
+
+  /// How rows are numbered in the file: lines in a CSV, entries in a PDF.
+  final String rowLabel;
   final VoidCallback onDone;
   final VoidCallback onImportAnother;
 
@@ -52,6 +56,16 @@ class ImportReport extends StatelessWidget {
             ),
           ],
         ),
+        if (outcome.matched > 0) ...[
+          const SizedBox(height: Space.m),
+          _Note(
+            icon: Icons.link_rounded,
+            color: c.primary,
+            text:
+                '${outcome.matched} payments were already here from another '
+                'statement. They were joined up, not added twice.',
+          ),
+        ],
         if (outcome.transfersMarked > 0) ...[
           const SizedBox(height: Space.m),
           _Note(
@@ -72,6 +86,7 @@ class ImportReport extends StatelessWidget {
           const SizedBox(height: Space.s),
           for (final e in outcome.errors)
             _RowIssue(
+              label: rowLabel,
               line: e.lineNumber,
               message: e.problem.message,
               excerpt: e.excerpt,
@@ -88,6 +103,7 @@ class ImportReport extends StatelessWidget {
           const SizedBox(height: Space.s),
           for (final w in outcome.balanceWarnings)
             _RowIssue(
+              label: rowLabel,
               line: w.lineNumber,
               message:
                   'Expected ${formatInr(w.expected)}, the statement says '
@@ -132,8 +148,14 @@ class _Note extends StatelessWidget {
 }
 
 class _RowIssue extends StatelessWidget {
-  const _RowIssue({required this.line, required this.message, this.excerpt});
+  const _RowIssue({
+    required this.label,
+    required this.line,
+    required this.message,
+    this.excerpt,
+  });
 
+  final String label;
   final int line;
   final String message;
   final String? excerpt;
@@ -147,7 +169,7 @@ class _RowIssue extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Line $line · $message', style: theme.titleMedium),
+            Text('$label $line · $message', style: theme.titleMedium),
             if (excerpt != null) ...[
               const SizedBox(height: Space.xs),
               Text(excerpt!, style: theme.bodySmall),

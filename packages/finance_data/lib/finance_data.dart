@@ -5,6 +5,7 @@ library;
 export 'src/db/connection.dart';
 export 'src/db/database.dart';
 export 'src/db/open_app_database.dart';
+export 'src/import/app_statement_importer.dart';
 export 'src/import/statement_importer.dart';
 export 'src/repositories/accounts_repository.dart';
 export 'src/repositories/transactions_repository.dart';
