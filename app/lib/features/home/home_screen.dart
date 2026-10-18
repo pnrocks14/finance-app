@@ -10,9 +10,9 @@ import '../../common/format.dart';
 import '../lock/lock_controller.dart';
 import '../transactions/transactions_screen.dart';
 
-/// Home, phase 2 version: this month's money in and out plus the latest
-/// transactions. The diagram-first home (donut, left-to-spend ring) arrives
-/// in phase 4.
+/// Home: one month at a glance, diagrams first. What's left of the income,
+/// where the money went, how spending built up against last month, what
+/// still needs a category, and the latest transactions.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -73,13 +73,23 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Overview extends ConsumerWidget {
+class _Overview extends ConsumerStatefulWidget {
   const _Overview(this.transactions);
 
+  /// The newest transactions, for the latest list and the default month.
   final List<Transaction> transactions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Overview> createState() => _OverviewState();
+}
+
+class _OverviewState extends ConsumerState<_Overview> {
+  /// Null until you switch: then the month of the newest transaction, so a
+  /// past statement still shows.
+  LocalDate? _picked;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
     final c = context.colors;
     final accounts = ref.watch(accountsProvider).value ?? const [];
@@ -88,27 +98,80 @@ class _Overview extends ConsumerWidget {
       for (final c in ref.watch(categoriesProvider).value ?? const <Category>[])
         c.id: c,
     };
+    final months =
+        ref.watch(monthsProvider).value ??
+        [monthOf(widget.transactions.first.localDate)];
+    final month = _picked ?? months.first;
+    final index = months.indexOf(month);
+    final older = index >= 0 && index < months.length - 1
+        ? months[index + 1]
+        : null;
+    final newer = index > 0 ? months[index - 1] : null;
 
-    // The month of the newest transaction, so a past statement still shows.
-    final latest = transactions.first.localDate;
-    final inMonth = transactions.where(
-      (t) =>
-          t.localDate.year == latest.year && t.localDate.month == latest.month,
-    );
-    var spent = 0;
-    var income = 0;
-    for (final t in inMonth) {
-      switch (t.flow) {
-        case TransactionFlow.spend:
-          spent += t.amountPaise;
-        case TransactionFlow.refund:
-          spent -= t.amountPaise;
-        case TransactionFlow.income:
-          income += t.amountPaise;
-        case TransactionFlow.transfer:
-          break;
-      }
-    }
+    List<MoneyMove> moves(List<Transaction> list) => [
+      for (final t in list)
+        MoneyMove(
+          date: t.localDate,
+          amount: Paise(t.amountPaise),
+          flow: t.flow,
+          categoryId: t.categoryId,
+        ),
+    ];
+    final thisMonth =
+        ref
+            .watch(
+              filteredTransactionsProvider(TransactionFilter(month: month)),
+            )
+            .value ??
+        const <Transaction>[];
+    final lastMonth = previousMonth(month);
+    final before =
+        ref
+            .watch(
+              filteredTransactionsProvider(TransactionFilter(month: lastMonth)),
+            )
+            .value ??
+        const <Transaction>[];
+    final summary = summarizeMonth(moves(thisMonth), month);
+    final previous = summarizeMonth(moves(before), lastMonth);
+    final today = LocalDate.today();
+    final isCurrent = monthOf(today) == month;
+    final curve = isCurrent
+        ? summary.cumulative.sublist(0, today.day)
+        : summary.cumulative;
+    final needs =
+        ref
+            .watch(
+              filteredTransactionsProvider(
+                const TransactionFilter(needsCategory: true),
+              ),
+            )
+            .value
+            ?.length ??
+        0;
+
+    // Top five categories, then the rest as one slice.
+    final top = summary.byCategory.take(5).toList();
+    final rest = summary.byCategory
+        .skip(5)
+        .fold(Paise.zero, (sum, e) => sum + e.$2);
+    final slices = [
+      for (final (id, amount) in top)
+        DonutSlice(
+          label: categories[id]?.name ?? 'Needs a category',
+          amount: amount,
+          color: id == null
+              ? c.textSecondary
+              : c.chartToken(categories[id]?.colorToken ?? 'chart8'),
+        ),
+      if (rest > Paise.zero)
+        DonutSlice(
+          label: 'Everything else',
+          amount: rest,
+          color: c.surfaceSoft,
+        ),
+    ];
+    final monthParam = month.toIso().substring(0, 7);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -118,33 +181,90 @@ class _Overview extends ConsumerWidget {
         Space.xxxl,
       ),
       children: [
-        Text(formatMonth(latest), style: theme.titleLarge),
-        const SizedBox(height: Space.m),
         Row(
           children: [
+            IconButton(
+              tooltip: 'Earlier month',
+              icon: const Icon(Icons.chevron_left_rounded),
+              onPressed: older == null
+                  ? null
+                  : () => setState(() => _picked = older),
+            ),
             Expanded(
-              child: _Total(
-                label: 'Spent',
-                amount: Paise(spent < 0 ? 0 : spent),
-                color: c.textPrimary,
+              child: Text(
+                formatMonth(month),
+                style: theme.titleLarge,
+                textAlign: TextAlign.center,
               ),
             ),
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: _Total(
-                label: 'Came in',
-                amount: Paise(income),
-                color: c.good,
-              ),
+            IconButton(
+              tooltip: 'Later month',
+              icon: const Icon(Icons.chevron_right_rounded),
+              onPressed: newer == null
+                  ? null
+                  : () => setState(() => _picked = newer),
             ),
           ],
         ),
         const SizedBox(height: Space.s),
-        Text(
-          "Transfers between your own accounts aren't counted. Refunds come "
-          'off spending.',
-          style: theme.bodySmall,
-        ),
+        _LeftToSpend(summary: summary),
+        if (needs > 0) ...[
+          const SizedBox(height: Space.m),
+          AppCard(
+            soft: true,
+            onTap: () => context.push('/sort'),
+            child: Row(
+              children: [
+                Icon(Icons.label_outline_rounded, color: c.primary),
+                const SizedBox(width: Space.m),
+                Expanded(
+                  child: Text(
+                    needs == 1
+                        ? '1 transaction needs a category'
+                        : '$needs transactions need a category',
+                    style: theme.bodyLarge,
+                  ),
+                ),
+                Text(
+                  'Sort them',
+                  style: theme.labelLarge?.copyWith(color: c.primary),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (slices.isNotEmpty) ...[
+          const SectionHeader('Where it went'),
+          Center(
+            child: CategoryDonut(
+              slices: slices,
+              centerLabel: 'spent in ${formatMonth(month).split(' ').first}',
+            ),
+          ),
+          const SizedBox(height: Space.m),
+          DonutLegend(
+            slices: slices,
+            onTap: (i) {
+              if (i >= top.length) {
+                context.push('/transactions?month=$monthParam');
+                return;
+              }
+              final id = top[i].$1;
+              context.push(
+                id == null
+                    ? '/transactions?month=$monthParam&needs=1'
+                    : '/transactions?month=$monthParam&category=$id',
+              );
+            },
+          ),
+          const SectionHeader('Through the month'),
+          SpendCurve(current: curve, previous: previous.cumulative),
+          const SizedBox(height: Space.xs),
+          Text(
+            _curveLine(summary, previous, curve.length),
+            style: theme.bodySmall,
+          ),
+        ],
         SectionHeader(
           'Latest',
           action: TextButton(
@@ -152,7 +272,7 @@ class _Overview extends ConsumerWidget {
             child: const Text('See all'),
           ),
         ),
-        for (final t in transactions.take(6))
+        for (final t in widget.transactions.take(6))
           TransactionTile(
             transaction: t,
             accountName: names[t.accountId],
@@ -163,12 +283,86 @@ class _Overview extends ConsumerWidget {
   }
 }
 
-class _Total extends StatelessWidget {
-  const _Total({
-    required this.label,
-    required this.amount,
-    required this.color,
-  });
+/// "₹2,400 less than last month by this day", or more, or the same.
+String _curveLine(MonthSummary now, MonthSummary before, int days) {
+  if (before.cumulative.every((p) => p == Paise.zero)) {
+    return 'No spending last month to compare with.';
+  }
+  final day = days.clamp(1, before.cumulative.length);
+  final diff = now.cumulative[days - 1] - before.cumulative[day - 1];
+  final amount = formatInr(diff.abs(), paise: PaiseDisplay.never);
+  if (diff == Paise.zero) return 'The same as last month by this day.';
+  return diff.isNegative
+      ? '$amount less than last month by this day.'
+      : '$amount more than last month by this day.';
+}
+
+/// What's left of this month's income after spending, as a ring.
+class _LeftToSpend extends StatelessWidget {
+  const _LeftToSpend({required this.summary});
+
+  final MonthSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final c = context.colors;
+    final s = summary;
+    final spent = s.spent.isNegative ? Paise.zero : s.spent;
+    final hasIncome = s.income > Paise.zero;
+    final tone = hasIncome ? BudgetTone.of(spent, s.income) : BudgetTone.over;
+    return AppCard(
+      child: Row(
+        children: [
+          ProgressRing(
+            progress: hasIncome ? spent.value / s.income.value : 1,
+            color: hasIncome ? tone.color(c) : c.textSecondary,
+            size: 112,
+            semanticLabel: hasIncome
+                ? '${formatInr(s.left, paise: PaiseDisplay.never)} left of '
+                      '${formatInr(s.income, paise: PaiseDisplay.never)}'
+                : 'No income this month',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MoneyText(
+                  hasIncome ? s.left : spent,
+                  style: theme.titleMedium,
+                  paise: PaiseDisplay.never,
+                ),
+                Text(hasIncome ? 'left' : 'spent', style: theme.bodySmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.l),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Line('Came in', s.income, c.good),
+                const SizedBox(height: Space.s),
+                _Line('Spent', spent, c.textPrimary),
+                const SizedBox(height: Space.s),
+                Text(
+                  hasIncome
+                      ? (s.left.isNegative
+                            ? 'You spent more than came in.'
+                            : "Transfers don't count. Refunds come off "
+                                  'spending.')
+                      : 'No income this month yet.',
+                  style: theme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Line extends StatelessWidget {
+  const _Line(this.label, this.amount, this.color);
 
   final String label;
   final Paise amount;
@@ -177,20 +371,16 @@ class _Total extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: theme.bodyMedium),
-          const SizedBox(height: Space.xs),
-          MoneyText(
-            amount,
-            style: theme.headlineMedium,
-            paise: PaiseDisplay.never,
-            color: color,
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: theme.bodyMedium)),
+        MoneyText(
+          amount,
+          style: theme.titleMedium,
+          paise: PaiseDisplay.never,
+          color: color,
+        ),
+      ],
     );
   }
 }

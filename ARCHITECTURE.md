@@ -233,6 +233,21 @@ user taps "Ask AI" ─▶ build minimal, redacted context ─▶ provider adapte
   has a "see why" that shows the numbers behind it.
 - Material 3 is used on Android. `UiStyle` leaves room for Cupertino on iOS later.
 
+### Screens (phase 4)
+
+- **Home** shows one IST month (switch with the arrows): a ring of what's left
+  of that month's income after spending, the "needs a category" count, a
+  category donut whose legend opens the filtered list, and `SpendCurve`, the
+  running total against last month by the same day. Totals come from
+  `summarizeMonth` in `finance_core`: transfers never count and refunds come
+  off the category they were filed under.
+- **Transactions** filter by month, money in or out, category, account and
+  "needs a category", plus a search over payee, UPI ID and narration
+  (`TransactionsRepository.watchFiltered`, in SQL). Routes carry the filter
+  as query parameters (`/transactions?month=2026-10&category=cat.groceries`).
+- **Sort** (`/sort`) is the labelling queue: one transaction at a time, with
+  the guess if there is one, "Always for <payee>", and skip.
+
 ## App lock
 
 `LockController` (Riverpod) is the single source of truth: `checking`,

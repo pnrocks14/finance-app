@@ -155,6 +155,13 @@ void main() {
         .import(accountId: account.id, result: parseStatement(_twoSwiggy));
     await pumpApp(tester, container);
     await typePin(tester, '4826');
+    await tester.scrollUntilVisible(
+      find.text('See all'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('See all'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('See all'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Food delivery ·'), findsNWidgets(2));
@@ -201,6 +208,11 @@ void main() {
 
     await pumpApp(tester, container);
     await typePin(tester, '4826');
+    await tester.scrollUntilVisible(
+      find.text('Swiggy'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Swiggy'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Import a statement'));

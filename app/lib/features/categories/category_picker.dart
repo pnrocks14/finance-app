@@ -53,17 +53,6 @@ class _CategoryPickerState extends State<_CategoryPicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
-    List<Category> of(Set<SpendClass> classes) => [
-      for (final c in widget.categories)
-        if (classes.contains(c.spendClass)) c,
-    ];
-    final out = ('Money out', of({SpendClass.flexible, SpendClass.fixed}));
-    final income = ('Money in', of({SpendClass.income}));
-    final moves = ('Transfers and savings', of({SpendClass.transfer}));
-    final groups = widget.direction == Direction.debit
-        ? [out, moves, income]
-        : [income, moves, out];
-
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.75,
@@ -79,41 +68,103 @@ class _CategoryPickerState extends State<_CategoryPicker> {
         children: [
           Text('Pick a category', style: theme.headlineSmall),
           if (widget.payee case final payee?)
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+            AlwaysForSwitch(
+              payee: payee,
               value: _always,
               onChanged: (v) => setState(() => _always = v),
-              title: Text('Always for $payee'),
-              subtitle: const Text(
-                'Makes a rule, and updates their other transactions that you '
-                "haven't set by hand.",
-              ),
             ),
-          for (final (title, list) in groups)
-            if (list.isNotEmpty) ...[
-              SectionHeader(title),
-              Wrap(
-                spacing: Space.s,
-                runSpacing: Space.s,
-                children: [
-                  for (final c in list)
-                    ChoiceChip(
-                      avatar: Icon(
-                        categoryIcon(c),
-                        size: 18,
-                        color: context.colors.chartToken(c.colorToken),
-                      ),
-                      label: Text(c.name),
-                      selected: c.id == widget.currentId,
-                      onSelected: (_) =>
-                          Navigator.of(context)
-                              .pop((categoryId: c.id, always: _always)),
-                    ),
-                ],
-              ),
-            ],
+          CategoryGroups(
+            categories: widget.categories,
+            direction: widget.direction,
+            currentId: widget.currentId,
+            onPick: (id) =>
+                Navigator.of(context).pop((categoryId: id, always: _always)),
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// "Always for (payee)": makes a rule when on.
+class AlwaysForSwitch extends StatelessWidget {
+  const AlwaysForSwitch({
+    super.key,
+    required this.payee,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String payee;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    contentPadding: EdgeInsets.zero,
+    value: value,
+    onChanged: onChanged,
+    title: Text('Always for $payee'),
+    subtitle: const Text(
+      'Makes a rule, and updates their other transactions that you '
+      "haven't set by hand.",
+    ),
+  );
+}
+
+/// Every category as chips, grouped: money out first for a debit and money
+/// in first for a credit.
+class CategoryGroups extends StatelessWidget {
+  const CategoryGroups({
+    super.key,
+    required this.categories,
+    required this.direction,
+    required this.onPick,
+    this.currentId,
+  });
+
+  final List<Category> categories;
+  final Direction direction;
+  final String? currentId;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    List<Category> of(Set<SpendClass> classes) => [
+      for (final c in categories)
+        if (classes.contains(c.spendClass)) c,
+    ];
+    final out = ('Money out', of({SpendClass.flexible, SpendClass.fixed}));
+    final income = ('Money in', of({SpendClass.income}));
+    final moves = ('Transfers and savings', of({SpendClass.transfer}));
+    final groups = direction == Direction.debit
+        ? [out, moves, income]
+        : [income, moves, out];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (title, list) in groups)
+          if (list.isNotEmpty) ...[
+            SectionHeader(title),
+            Wrap(
+              spacing: Space.s,
+              runSpacing: Space.s,
+              children: [
+                for (final c in list)
+                  ChoiceChip(
+                    avatar: Icon(
+                      categoryIcon(c),
+                      size: 18,
+                      color: context.colors.chartToken(c.colorToken),
+                    ),
+                    label: Text(c.name),
+                    selected: c.id == currentId,
+                    onSelected: (_) => onPick(c.id),
+                  ),
+              ],
+            ),
+          ],
+      ],
     );
   }
 }

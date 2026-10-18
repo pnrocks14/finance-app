@@ -1,3 +1,4 @@
+import 'package:finance_core/finance_core.dart';
 import 'package:finance_data/finance_data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -49,6 +50,31 @@ final categoriesProvider = StreamProvider<List<Category>>((ref) async* {
 final categoryRulesProvider = StreamProvider<List<CategoryRule>>((ref) async* {
   final repo = await ref.watch(categoriesRepositoryProvider.future);
   yield* repo.watchRules();
+});
+
+/// Transactions narrowed by a filter, newest first.
+final filteredTransactionsProvider =
+    StreamProvider.family<List<Transaction>, TransactionFilter>((
+      ref,
+      filter,
+    ) async* {
+      final repo = await ref.watch(transactionsRepositoryProvider.future);
+      yield* repo.watchFiltered(filter);
+    });
+
+/// One transaction, for its detail sheet.
+final transactionProvider = StreamProvider.family<Transaction?, String>((
+  ref,
+  id,
+) async* {
+  final repo = await ref.watch(transactionsRepositoryProvider.future);
+  yield* repo.watchOne(id);
+});
+
+/// Months with transactions, newest first.
+final monthsProvider = StreamProvider<List<LocalDate>>((ref) async* {
+  final repo = await ref.watch(transactionsRepositoryProvider.future);
+  yield* repo.watchMonths();
 });
 
 /// Opens the system file picker. Overridden in tests.

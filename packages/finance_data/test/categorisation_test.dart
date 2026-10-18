@@ -118,4 +118,35 @@ void main() {
     expect(txs[4].categoryId, Cat.shopping);
     expect(txs[2].categoryId, Cat.groceries); // set by hand, kept
   });
+
+  test(
+    'filters: month, category, needs a category, direction, search',
+    () async {
+      await importStatement();
+      final repo = TransactionsRepository(db);
+      Future<int> count(TransactionFilter f) async =>
+          (await repo.watchFiltered(f).first).length;
+
+      expect(await count(const TransactionFilter()), 5);
+      expect(await count(TransactionFilter(month: LocalDate(2026, 10, 18))), 5);
+      expect(await count(TransactionFilter(month: LocalDate(2026, 9, 1))), 0);
+      expect(
+        await count(const TransactionFilter(categoryId: Cat.foodDelivery)),
+        2,
+      );
+      expect(
+        await count(const TransactionFilter(direction: Direction.credit)),
+        1,
+      );
+      expect(await count(const TransactionFilter(search: 'sharma')), 2);
+      expect(await count(const TransactionFilter(search: 'zz%z')), 0);
+      expect(await count(const TransactionFilter(needsCategory: true)), 0);
+
+      final swiggy = (await all()).first;
+      await (db.update(db.transactions)..where((t) => t.id.equals(swiggy.id)))
+          .write(const TransactionsCompanion(categoryId: Value(null)));
+      expect(await count(const TransactionFilter(needsCategory: true)), 1);
+      expect(await repo.watchMonths().first, [LocalDate(2026, 10, 1)]);
+    },
+  );
 }

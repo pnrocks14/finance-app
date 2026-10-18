@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/categories/rules_screen.dart';
+import '../features/categories/sort_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/import/import_screen.dart';
 import '../features/lock/lock_controller.dart';
@@ -42,8 +43,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/import', builder: (_, _) => const ImportScreen()),
       GoRoute(
         path: '/transactions',
-        builder: (_, _) => const TransactionsScreen(),
+        builder: (_, state) => TransactionsScreen(
+          key: ValueKey(state.uri.query),
+          initial: TransactionsScreen.filterFrom(state.uri.queryParameters),
+        ),
       ),
+      GoRoute(path: '/sort', builder: (_, _) => const SortScreen()),
       GoRoute(path: '/rules', builder: (_, _) => const RulesScreen()),
       GoRoute(
         path: '/style-sheet',

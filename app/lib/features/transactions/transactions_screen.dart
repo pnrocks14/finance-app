@@ -11,21 +11,162 @@ import '../../common/widgets.dart';
 import '../categories/category_picker.dart';
 import '../categories/category_visuals.dart';
 
-/// Every transaction, newest first, grouped by day. Tap one to see where it
-/// came from and why it counts the way it does.
-class TransactionsScreen extends ConsumerWidget {
-  const TransactionsScreen({super.key});
+/// Every transaction, newest first, grouped by day, with filters for the
+/// month, account, category, money in or out, and a search. Tap one to see
+/// where it came from, why it counts the way it does, and to change its
+/// category.
+class TransactionsScreen extends ConsumerStatefulWidget {
+  const TransactionsScreen({
+    super.key,
+    this.initial = const TransactionFilter(),
+  });
+
+  /// The filter to open with, e.g. from a tap on the home donut.
+  final TransactionFilter initial;
+
+  /// Reads `month=2026-10`, `category=<id>`, `account=<id>`, `needs=1`,
+  /// `direction=debit|credit` and `q=<text>` from a route.
+  static TransactionFilter filterFrom(Map<String, String> q) {
+    LocalDate? month;
+    final m = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(q['month'] ?? '');
+    if (m != null) {
+      month = LocalDate(int.parse(m[1]!), int.parse(m[2]!), 1);
+    }
+    return TransactionFilter(
+      month: month,
+      accountId: q['account'],
+      categoryId: q['category'],
+      needsCategory: q['needs'] == '1',
+      direction: switch (q['direction']) {
+        'debit' => Direction.debit,
+        'credit' => Direction.credit,
+        _ => null,
+      },
+      search: q['q'],
+    );
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final txs = ref.watch(transactionsProvider);
+  ConsumerState<TransactionsScreen> createState() => _TransactionsScreenState();
+}
+
+class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
+  late var _filter = widget.initial;
+  late final _search = TextEditingController(text: widget.initial.search);
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _set(TransactionFilter f) => setState(() => _filter = f);
+
+  /// A sheet listing [options]; returns the picked value wrapped, so "Any"
+  /// (null) can be told apart from a dismissed sheet.
+  Future<(T?,)?> _pick<T>(
+    String title,
+    List<(T?, String)> options,
+    T? now,
+  ) => showModalBottomSheet<(T?,)>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.5,
+      maxChildSize: 0.9,
+      builder: (context, scroll) => ListView(
+        controller: scroll,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.screen),
+            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          ),
+          for (final (value, label) in options)
+            ListTile(
+              title: Text(label),
+              trailing: value == now ? const Icon(Icons.check_rounded) : null,
+              onTap: () => Navigator.of(context).pop((value,)),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final txs = ref.watch(filteredTransactionsProvider(_filter));
     final accounts = ref.watch(accountsProvider).value ?? const [];
     final names = {for (final a in accounts) a.id: a.displayName};
-    final categories = {
-      for (final c in ref.watch(categoriesProvider).value ?? const <Category>[])
-        c.id: c,
-    };
+    final categoryList =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
+    final categories = {for (final c in categoryList) c.id: c};
+    final months = ref.watch(monthsProvider).value ?? const <LocalDate>[];
     final theme = Theme.of(context).textTheme;
+    final f = _filter;
+
+    final chips = <Widget>[
+      _FilterChip(
+        label: f.month == null ? 'All months' : formatMonth(f.month!),
+        active: f.month != null,
+        onTap: () async {
+          final r = await _pick<LocalDate>('Month', [
+            (null, 'All months'),
+            for (final m in months) (m, formatMonth(m)),
+          ], f.month);
+          if (r != null) _set(f.copyWith(month: () => r.$1));
+        },
+      ),
+      _FilterChip(
+        label: switch (f.direction) {
+          null => 'In and out',
+          Direction.debit => 'Money out',
+          Direction.credit => 'Money in',
+        },
+        active: f.direction != null,
+        onTap: () async {
+          final r = await _pick<Direction>('Money', [
+            (null, 'In and out'),
+            (Direction.debit, 'Money out'),
+            (Direction.credit, 'Money in'),
+          ], f.direction);
+          if (r != null) _set(f.copyWith(direction: () => r.$1));
+        },
+      ),
+      _FilterChip(
+        label: categories[f.categoryId]?.name ?? 'Any category',
+        active: f.categoryId != null,
+        onTap: () async {
+          final r = await _pick<String>('Category', [
+            (null, 'Any category'),
+            for (final c in categoryList) (c.id, c.name),
+          ], f.categoryId);
+          if (r != null) {
+            _set(f.copyWith(categoryId: () => r.$1, needsCategory: false));
+          }
+        },
+      ),
+      if (accounts.length > 1)
+        _FilterChip(
+          label: names[f.accountId] ?? 'All accounts',
+          active: f.accountId != null,
+          onTap: () async {
+            final r = await _pick<String>('Account', [
+              (null, 'All accounts'),
+              for (final a in accounts) (a.id, a.displayName),
+            ], f.accountId);
+            if (r != null) _set(f.copyWith(accountId: () => r.$1));
+          },
+        ),
+      FilterChip(
+        label: const Text('Needs a category'),
+        selected: f.needsCategory,
+        onSelected: (v) => _set(
+          f.copyWith(needsCategory: v, categoryId: v ? () => null : null),
+        ),
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -43,60 +184,160 @@ class TransactionsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: txs.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text("Couldn't load your transactions.")),
-        data: (list) {
-          if (list.isEmpty) {
-            return Center(
-              child: EmptyState(
-                title: 'No transactions yet',
-                message: 'Import a bank statement and they will show up here.',
-                actionLabel: 'Import a statement',
-                onAction: () => context.push('/import'),
-              ),
-            );
-          }
-          final items = <Object>[];
-          LocalDate? day;
-          for (final t in list) {
-            if (t.localDate != day) {
-              day = t.localDate;
-              items.add(day);
-            }
-            items.add(t);
-          }
-          return ListView.builder(
+      body: Column(
+        children: [
+          Padding(
             padding: const EdgeInsets.fromLTRB(
               Space.screen,
               0,
               Space.screen,
-              Space.xxxl,
+              Space.s,
             ),
-            itemCount: items.length,
-            itemBuilder: (context, i) => switch (items[i]) {
-              final LocalDate d => Padding(
-                padding: const EdgeInsets.only(top: Space.l, bottom: Space.xs),
-                child: Text(
-                  formatDayHeader(d),
-                  style: theme.labelLarge?.copyWith(
-                    color: context.colors.textSecondary,
+            child: TextField(
+              controller: _search,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search payee, UPI ID or note',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _search.clear();
+                          _set(f.copyWith(search: () => null));
+                        },
+                      ),
+              ),
+              onChanged: (v) =>
+                  _set(_filter.copyWith(search: () => v.isEmpty ? null : v)),
+            ),
+          ),
+          SizedBox(
+            height: 48,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: Space.screen),
+              itemCount: chips.length,
+              separatorBuilder: (_, _) => const SizedBox(width: Space.s),
+              itemBuilder: (_, i) => Center(child: chips[i]),
+            ),
+          ),
+          Expanded(
+            child: txs.when(
+              skipLoadingOnReload: true,
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, _) =>
+                  const Center(child: Text("Couldn't load your transactions.")),
+              data: (list) {
+                if (list.isEmpty && f.isEmpty) {
+                  return Center(
+                    child: EmptyState(
+                      title: 'No transactions yet',
+                      message:
+                          'Import a bank statement and they will show up here.',
+                      actionLabel: 'Import a statement',
+                      onAction: () => context.push('/import'),
+                    ),
+                  );
+                }
+                if (list.isEmpty) {
+                  return Center(
+                    child: EmptyState(
+                      title: 'Nothing matches',
+                      message: 'Try another month or clear the filters.',
+                      actionLabel: 'Clear filters',
+                      onAction: () {
+                        _search.clear();
+                        _set(const TransactionFilter());
+                      },
+                    ),
+                  );
+                }
+                var out = 0;
+                var inn = 0;
+                for (final t in list) {
+                  if (t.flow == TransactionFlow.transfer) continue;
+                  t.direction == Direction.debit
+                      ? out += t.amountPaise
+                      : inn += t.amountPaise;
+                }
+                final items = <Object>[
+                  '${list.length} ${list.length == 1 ? 'transaction' : 'transactions'}'
+                      ' · ${formatInr(Paise(out), paise: PaiseDisplay.never)} out'
+                      ' · ${formatInr(Paise(inn), paise: PaiseDisplay.never)} in',
+                ];
+                LocalDate? day;
+                for (final t in list) {
+                  if (t.localDate != day) {
+                    day = t.localDate;
+                    items.add(day);
+                  }
+                  items.add(t);
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.screen,
+                    0,
+                    Space.screen,
+                    Space.xxxl,
                   ),
-                ),
-              ),
-              final Transaction t => TransactionTile(
-                transaction: t,
-                accountName: names[t.accountId],
-                category: categories[t.categoryId],
-              ),
-              _ => const SizedBox.shrink(),
-            },
-          );
-        },
+                  itemCount: items.length,
+                  itemBuilder: (context, i) => switch (items[i]) {
+                    final String line => Padding(
+                      padding: const EdgeInsets.only(top: Space.s),
+                      child: Text(line, style: theme.bodySmall),
+                    ),
+                    final LocalDate d => Padding(
+                      padding: const EdgeInsets.only(
+                        top: Space.l,
+                        bottom: Space.xs,
+                      ),
+                      child: Text(
+                        formatDayHeader(d),
+                        style: theme.labelLarge?.copyWith(
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    final Transaction t => TransactionTile(
+                      transaction: t,
+                      accountName: names[t.accountId],
+                      category: categories[t.categoryId],
+                    ),
+                    _ => const SizedBox.shrink(),
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+/// A chip that opens a choice sheet; filled when its filter is set.
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InputChip(
+    label: Text(label),
+    selected: active,
+    showCheckmark: false,
+    avatar: const Icon(Icons.arrow_drop_down_rounded),
+    onPressed: onTap,
+  );
 }
 
 /// One row of the list: category, payee, channel and account, signed
@@ -218,8 +459,7 @@ class _TransactionDetail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final list = ref.watch(transactionsProvider).value ?? const [];
-    final t = list.where((x) => x.id == id).firstOrNull;
+    final t = ref.watch(transactionProvider(id)).value;
     if (t == null) return const SizedBox(height: 200);
     final categories = ref.watch(categoriesProvider).value ?? const [];
     final category = categories.where((c) => c.id == t.categoryId).firstOrNull;
