@@ -49,11 +49,111 @@ CategoryRuleSpec _spec(CategoryRule r) => CategoryRuleSpec(
   priority: r.priority,
 );
 
-/// Categories for screens.
+/// Categories for screens, and adding, editing and removing them.
 class CategoriesRepository {
-  CategoriesRepository(this._db);
+  CategoriesRepository(this._db, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   final FinanceDatabase _db;
+  final DateTime Function() _clock;
+
+  /// Adds a category of your own, after the others.
+  Future<Category> create({
+    required String name,
+    required SpendClass spendClass,
+    required String icon,
+    required String colorToken,
+  }) async {
+    final now = _clock().toUtc();
+    final last = _db.categories.sortOrder.max();
+    final row = await (_db.selectOnly(
+      _db.categories,
+    )..addColumns([last])).getSingle();
+    return _db
+        .into(_db.categories)
+        .insertReturning(
+          CategoriesCompanion.insert(
+            id: newId(),
+            createdAt: now,
+            updatedAt: now,
+            name: name.trim(),
+            spendClass: spendClass,
+            spendClassSource: SpendClassSource.user,
+            icon: icon,
+            colorToken: colorToken,
+            sortOrder: Value((row.read(last) ?? 0) + 1),
+          ),
+        );
+  }
+
+  /// Renames a category or changes its look, or whether spending in it is
+  /// fixed or flexible. Built-in ones can be changed too; a fresh install
+  /// never puts your changes back.
+  Future<void> update(
+    String id, {
+    String? name,
+    String? icon,
+    String? colorToken,
+    SpendClass? spendClass,
+  }) async {
+    final c = await (_db.select(
+      _db.categories,
+    )..where((r) => r.id.equals(id))).getSingle();
+    await (_db.update(_db.categories)..where((r) => r.id.equals(id))).write(
+      CategoriesCompanion(
+        name: name == null || name.trim().isEmpty
+            ? const Value.absent()
+            : Value(name.trim()),
+        icon: icon == null ? const Value.absent() : Value(icon),
+        colorToken: colorToken == null
+            ? const Value.absent()
+            : Value(colorToken),
+        spendClass: spendClass == null
+            ? const Value.absent()
+            : Value(spendClass),
+        spendClassSource: spendClass == null
+            ? const Value.absent()
+            : const Value(SpendClassSource.user),
+        version: Value(c.version + 1),
+        updatedAt: Value(_clock().toUtc()),
+      ),
+    );
+  }
+
+  /// Removes a category you added. Its transactions go back to needing a
+  /// category, and its rules and budget go with it. Built-in categories
+  /// can't be removed, because the dictionary files payees under them.
+  Future<void> delete(String id) => _db.transaction(() async {
+    final c = await (_db.select(
+      _db.categories,
+    )..where((r) => r.id.equals(id))).getSingle();
+    if (c.isSystem) {
+      throw StateError("Built-in categories can't be removed");
+    }
+    final now = _clock().toUtc();
+    await (_db.update(
+      _db.transactions,
+    )..where((t) => t.categoryId.equals(id))).write(
+      TransactionsCompanion(
+        categoryId: const Value(null),
+        categorizedBy: const Value(null),
+        categorizationRuleId: const Value(null),
+        categorizationConfidence: const Value(null),
+        updatedAt: Value(now),
+      ),
+    );
+    await (_db.update(_db.trainingLabels)
+          ..where((l) => l.previousCategoryId.equals(id)))
+        .write(const TrainingLabelsCompanion(previousCategoryId: Value(null)));
+    await (_db.delete(
+      _db.trainingLabels,
+    )..where((l) => l.categoryId.equals(id))).go();
+    await (_db.delete(
+      _db.categoryRules,
+    )..where((r) => r.categoryId.equals(id))).go();
+    await (_db.delete(_db.budgets)..where((b) => b.categoryId.equals(id))).go();
+    await (_db.delete(_db.categories)..where((r) => r.id.equals(id))).go();
+  });
 
   Stream<List<Category>> watchAll() =>
       (_db.select(_db.categories)..orderBy([

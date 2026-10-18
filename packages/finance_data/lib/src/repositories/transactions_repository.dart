@@ -3,19 +3,29 @@ import 'package:finance_core/finance_core.dart';
 
 import '../db/database.dart';
 
+/// The order a list shows transactions in.
+enum TransactionSort { newest, oldest, largest, smallest }
+
 /// Which transactions a list shows. Every field left null means "any".
 final class TransactionFilter {
   const TransactionFilter({
     this.month,
+    this.from,
+    this.to,
     this.accountId,
     this.categoryId,
     this.needsCategory = false,
     this.direction,
     this.search,
+    this.sort = TransactionSort.newest,
   });
 
   /// Any day in the month; only that IST calendar month is shown.
   final LocalDate? month;
+
+  /// The first and last day to show, inclusive; either may be left open.
+  final LocalDate? from;
+  final LocalDate? to;
   final String? accountId;
   final String? categoryId;
 
@@ -26,9 +36,12 @@ final class TransactionFilter {
 
   /// Matched against the payee, UPI ID and narration, ignoring case.
   final String? search;
+  final TransactionSort sort;
 
   bool get isEmpty =>
       month == null &&
+      from == null &&
+      to == null &&
       accountId == null &&
       categoryId == null &&
       !needsCategory &&
@@ -37,38 +50,50 @@ final class TransactionFilter {
 
   TransactionFilter copyWith({
     LocalDate? Function()? month,
+    LocalDate? Function()? from,
+    LocalDate? Function()? to,
     String? Function()? accountId,
     String? Function()? categoryId,
     bool? needsCategory,
     Direction? Function()? direction,
     String? Function()? search,
+    TransactionSort? sort,
   }) => TransactionFilter(
     month: month == null ? this.month : month(),
+    from: from == null ? this.from : from(),
+    to: to == null ? this.to : to(),
     accountId: accountId == null ? this.accountId : accountId(),
     categoryId: categoryId == null ? this.categoryId : categoryId(),
     needsCategory: needsCategory ?? this.needsCategory,
     direction: direction == null ? this.direction : direction(),
     search: search == null ? this.search : search(),
+    sort: sort ?? this.sort,
   );
 
   @override
   bool operator ==(Object other) =>
       other is TransactionFilter &&
       other.month == month &&
+      other.from == from &&
+      other.to == to &&
       other.accountId == accountId &&
       other.categoryId == categoryId &&
       other.needsCategory == needsCategory &&
       other.direction == direction &&
-      other.search == search;
+      other.search == search &&
+      other.sort == sort;
 
   @override
   int get hashCode => Object.hash(
     month,
+    from,
+    to,
     accountId,
     categoryId,
     needsCategory,
     direction,
     search,
+    sort,
   );
 }
 
@@ -102,15 +127,35 @@ class TransactionsRepository {
   }) {
     final q = _db.select(_db.transactions)
       ..where((t) => t.deletedAt.isNull())
-      ..orderBy([
-        (t) => OrderingTerm.desc(t.localDate),
-        (t) => OrderingTerm.desc(t.createdAt),
-      ])
+      ..orderBy(switch (filter.sort) {
+        TransactionSort.newest => [
+          (t) => OrderingTerm.desc(t.localDate),
+          (t) => OrderingTerm.desc(t.createdAt),
+        ],
+        TransactionSort.oldest => [
+          (t) => OrderingTerm.asc(t.localDate),
+          (t) => OrderingTerm.asc(t.createdAt),
+        ],
+        TransactionSort.largest => [
+          (t) => OrderingTerm.desc(t.amountPaise),
+          (t) => OrderingTerm.desc(t.localDate),
+        ],
+        TransactionSort.smallest => [
+          (t) => OrderingTerm.asc(t.amountPaise),
+          (t) => OrderingTerm.desc(t.localDate),
+        ],
+      })
       ..limit(limit);
     if (filter.month case final m?) {
       final first = LocalDate(m.year, m.month, 1);
       final last = LocalDate(m.year, m.month, first.daysInMonth);
       q.where((t) => t.localDate.isBetweenValues(first.toIso(), last.toIso()));
+    }
+    if (filter.from case final d?) {
+      q.where((t) => t.localDate.isBiggerOrEqualValue(d.toIso()));
+    }
+    if (filter.to case final d?) {
+      q.where((t) => t.localDate.isSmallerOrEqualValue(d.toIso()));
     }
     if (filter.accountId case final id?) {
       q.where((t) => t.accountId.equals(id));

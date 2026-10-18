@@ -76,7 +76,9 @@ enum CounterpartyKind implements WireEnum {
 enum AccountKind implements WireEnum {
   bankAccount('bank_account'),
   creditCard('credit_card'),
-  wallet('wallet');
+  wallet('wallet'),
+  cash('cash'),
+  investment('investment');
 
   const AccountKind(this.wire);
   @override

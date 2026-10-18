@@ -62,13 +62,15 @@ void main() {
     );
     expect(find.text('2 transactions need a category'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('Groceries'),
-      200,
-      scrollable: _home,
+    // Biggest first: groceries, then the two unsorted, then food delivery.
+    for (final name in ['Groceries', 'Needs a category', 'Food delivery']) {
+      await tester.scrollUntilVisible(find.text(name), 200, scrollable: _home);
+      await tester.pumpAndSettle();
+    }
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Food delivery, ₹450, 15%')),
+      findsOneWidget,
     );
-    expect(find.text('Food delivery'), findsWidgets);
-    expect(find.text('Needs a category'), findsWidgets);
     await tester.scrollUntilVisible(
       find.textContaining('than last month by this day'),
       200,
@@ -155,5 +157,61 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.textContaining('need a category'), findsNothing);
+  });
+
+  testWidgets('sort by amount and pick your own dates', (tester) async {
+    await _open(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Records'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Newest first'),
+      150,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
+          )
+          .last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Newest first'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Highest amount'));
+    await tester.pumpAndSettle();
+    final names = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data)
+        .where(
+          (d) => const {
+            'Acme Technologies Pvt Ltd',
+            'Blinkit',
+            'Swiggy',
+          }.contains(d),
+        )
+        .toList();
+    expect(names.take(2), ['Acme Technologies Pvt Ltd', 'Blinkit']);
+    // Not grouped by day, so each row has its date.
+    expect(find.textContaining('2 Oct 2026 · '), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('All months'),
+      -150,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
+          )
+          .last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All months'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pick dates…'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsOneWidget);
   });
 }

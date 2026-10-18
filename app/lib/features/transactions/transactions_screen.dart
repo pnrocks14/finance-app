@@ -19,21 +19,35 @@ class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({
     super.key,
     this.initial = const TransactionFilter(),
+    this.title = 'Transactions',
   });
 
   /// The filter to open with, e.g. from a tap on the home donut.
   final TransactionFilter initial;
+  final String title;
 
-  /// Reads `month=2026-10`, `category=<id>`, `account=<id>`, `needs=1`,
-  /// `direction=debit|credit` and `q=<text>` from a route.
+  /// Reads `month=2026-10`, `from=2026-10-01`, `to=2026-10-07`,
+  /// `category=<id>`, `account=<id>`, `needs=1`, `direction=debit|credit`
+  /// and `q=<text>` from a route.
   static TransactionFilter filterFrom(Map<String, String> q) {
     LocalDate? month;
     final m = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(q['month'] ?? '');
     if (m != null) {
       month = LocalDate(int.parse(m[1]!), int.parse(m[2]!), 1);
     }
+    LocalDate? day(String? s) {
+      if (s == null) return null;
+      try {
+        return LocalDate.parse(s);
+      } on FormatException {
+        return null;
+      }
+    }
+
     return TransactionFilter(
       month: month,
+      from: day(q['from']),
+      to: day(q['to']),
       accountId: q['account'],
       categoryId: q['category'],
       needsCategory: q['needs'] == '1',
@@ -49,6 +63,9 @@ class TransactionsScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<TransactionsScreen> createState() => _TransactionsScreenState();
 }
+
+/// Stands for "Pick dates…" in the month sheet.
+final _customDates = LocalDate(1, 1, 1);
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   late var _filter = widget.initial;
@@ -70,6 +87,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     T? now,
   ) => showModalBottomSheet<(T?,)>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (context) => DraggableScrollableSheet(
@@ -108,14 +126,56 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     final chips = <Widget>[
       _FilterChip(
-        label: f.month == null ? 'All months' : formatMonth(f.month!),
-        active: f.month != null,
+        label: f.from != null || f.to != null
+            ? (f.from == f.to
+                  ? formatShortDate(f.from!)
+                  : formatPeriod(f.from ?? f.to!, f.to ?? f.from!))
+            : f.month == null
+            ? 'All months'
+            : formatMonth(f.month!),
+        active: f.month != null || f.from != null || f.to != null,
         onTap: () async {
-          final r = await _pick<LocalDate>('Month', [
+          final r = await _pick<LocalDate>('Dates', [
             (null, 'All months'),
+            (_customDates, 'Pick dates…'),
             for (final m in months) (m, formatMonth(m)),
-          ], f.month);
-          if (r != null) _set(f.copyWith(month: () => r.$1));
+          ], f.from != null || f.to != null ? _customDates : f.month);
+          if (r == null || !context.mounted) return;
+          if (r.$1 != _customDates) {
+            _set(
+              f.copyWith(month: () => r.$1, from: () => null, to: () => null),
+            );
+            return;
+          }
+          final today = DateTime.now();
+          final start = f.from ?? f.month;
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2000),
+            lastDate: DateTime(today.year + 1, 12, 31),
+            initialDateRange: start == null
+                ? null
+                : DateTimeRange(
+                    start: DateTime(start.year, start.month, start.day),
+                    end: switch (f.to) {
+                      final t? => DateTime(t.year, t.month, t.day),
+                      null => DateTime(
+                        start.year,
+                        start.month,
+                        f.month == null ? start.day : start.daysInMonth,
+                      ),
+                    },
+                  ),
+          );
+          if (range == null) return;
+          LocalDate day(DateTime d) => LocalDate(d.year, d.month, d.day);
+          _set(
+            _filter.copyWith(
+              month: () => null,
+              from: () => day(range.start),
+              to: () => day(range.end),
+            ),
+          );
         },
       ),
       _FilterChip(
@@ -166,11 +226,35 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           f.copyWith(needsCategory: v, categoryId: v ? () => null : null),
         ),
       ),
+      _FilterChip(
+        label: switch (f.sort) {
+          TransactionSort.newest => 'Newest first',
+          TransactionSort.oldest => 'Oldest first',
+          TransactionSort.largest => 'Highest amount',
+          TransactionSort.smallest => 'Lowest amount',
+        },
+        active: f.sort != TransactionSort.newest,
+        onTap: () async {
+          final r = await _pick<TransactionSort>('Sort by', [
+            (TransactionSort.newest, 'Newest first'),
+            (TransactionSort.oldest, 'Oldest first'),
+            (TransactionSort.largest, 'Highest amount'),
+            (TransactionSort.smallest, 'Lowest amount'),
+          ], f.sort);
+          if (r?.$1 case final sort?) _set(f.copyWith(sort: sort));
+        },
+      ),
     ];
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'add-${widget.title}',
+        tooltip: 'Add a transaction',
+        onPressed: () => context.push('/add'),
+        child: const Icon(Icons.add_rounded),
+      ),
       appBar: AppBar(
-        title: const Text('Transactions'),
+        title: Text(widget.title),
         actions: [
           IconButton(
             tooltip: 'Your rules',
@@ -250,7 +334,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       actionLabel: 'Clear filters',
                       onAction: () {
                         _search.clear();
-                        _set(const TransactionFilter());
+                        _set(TransactionFilter(sort: f.sort));
                       },
                     ),
                   );
@@ -268,9 +352,13 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       ' · ${formatInr(Paise(out), paise: PaiseDisplay.never)} out'
                       ' · ${formatInr(Paise(inn), paise: PaiseDisplay.never)} in',
                 ];
+                // Day headers only make sense in date order.
+                final byDate =
+                    f.sort == TransactionSort.newest ||
+                    f.sort == TransactionSort.oldest;
                 LocalDate? day;
                 for (final t in list) {
-                  if (t.localDate != day) {
+                  if (byDate && t.localDate != day) {
                     day = t.localDate;
                     items.add(day);
                   }
@@ -305,6 +393,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       transaction: t,
                       accountName: names[t.accountId],
                       category: categories[t.categoryId],
+                      showDate: !byDate,
                     ),
                     _ => const SizedBox.shrink(),
                   },
@@ -348,11 +437,15 @@ class TransactionTile extends StatelessWidget {
     required this.transaction,
     this.accountName,
     this.category,
+    this.showDate = false,
   });
 
   final Transaction transaction;
   final String? accountName;
   final Category? category;
+
+  /// Adds the date to the second line, for lists not grouped by day.
+  final bool showDate;
 
   @override
   Widget build(BuildContext context) {
@@ -360,9 +453,12 @@ class TransactionTile extends StatelessWidget {
     final c = context.colors;
     final theme = Theme.of(context).textTheme;
     final transfer = t.flow == TransactionFlow.transfer;
+    final byHand =
+        t.flowReason == FlowReason.user && t.channel == Channel.other;
     final subtitle = [
+      if (showDate) formatShortDate(t.localDate),
       category?.name ?? 'Needs a category',
-      channelLabel(t.channel),
+      byHand ? 'Added by you' : channelLabel(t.channel),
       ?accountName,
     ].join(' · ');
     return InkWell(
@@ -445,6 +541,7 @@ Future<void> showTransactionDetail(
   String? accountName,
 ) => showModalBottomSheet<void>(
   context: context,
+  useRootNavigator: true,
   isScrollControlled: true,
   showDragHandle: true,
   builder: (_) =>
@@ -474,7 +571,8 @@ class _TransactionDetail extends ConsumerWidget {
     final facts = <(String, String)>[
       ('Date', formatShortDate(t.localDate)),
       if (accountName != null) ('Account', accountName!),
-      ('Paid by', channelLabel(t.channel)),
+      if (t.flowReason != FlowReason.user || t.channel != Channel.other)
+        ('Paid by', channelLabel(t.channel)),
       if (t.vpa != null) ('UPI ID', t.vpa!),
       if (t.upiRef != null) ('UPI ref', t.upiRef!),
       if (t.bankRef != null) ('Bank ref', t.bankRef!),
@@ -482,6 +580,35 @@ class _TransactionDetail extends ConsumerWidget {
     ];
     final input = categorizeInputOf(t);
     final canRemember = ruleForCorrection(input) != null;
+    final manual = ref.watch(isManualProvider(t.id)).value ?? false;
+
+    Future<void> remove() async {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove this entry?'),
+          content: Text(
+            t.flow == TransactionFlow.transfer
+                ? 'Both sides of the transfer go.'
+                : 'It comes off your totals and balances.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final entries = await ref.read(manualEntriesProvider.future);
+      await entries.delete(t.id);
+      if (context.mounted) Navigator.of(context).pop();
+    }
 
     Future<void> change() async {
       final choice = await showCategoryPicker(
@@ -568,7 +695,7 @@ class _TransactionDetail extends ConsumerWidget {
               ],
             ),
           ),
-          const SectionHeader('What we read'),
+          SectionHeader(manual ? 'Details' : 'What we read'),
           for (final (k, v) in facts)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.xs),
@@ -580,9 +707,23 @@ class _TransactionDetail extends ConsumerWidget {
                 ],
               ),
             ),
+          if (t.notes != null) ...[
+            const SectionHeader('Note'),
+            Text(t.notes!, style: theme.bodyMedium),
+          ],
           if (t.descriptionRaw != null) ...[
             const SectionHeader('From your statement'),
             SelectableText(t.descriptionRaw!, style: theme.bodySmall),
+          ],
+          if (manual) ...[
+            const SizedBox(height: Space.xl),
+            PillButton(
+              label: 'Remove this entry',
+              kind: PillButtonKind.secondary,
+              icon: Icons.delete_outline_rounded,
+              expand: true,
+              onPressed: remove,
+            ),
           ],
         ],
       ),

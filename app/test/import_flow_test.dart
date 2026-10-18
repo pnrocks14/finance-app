@@ -113,6 +113,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('HDFC Bank'));
     await tester.pump();
+    await tester.ensureVisible(find.text('Add account'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Add account'));
     await tester.pumpAndSettle();
 
@@ -127,6 +129,9 @@ void main() {
     await tester.tap(find.text('See transactions'));
     await tester.pumpAndSettle();
 
+    // It lands on the Records tab, so the tabs (and home) are still there.
+    expect(find.text('Records'), findsWidgets);
+    expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Swiggy'), findsOneWidget);
     expect(find.text('Acme Technologies Pvt Ltd'), findsOneWidget);
     await tester.tap(find.text('Swiggy'));

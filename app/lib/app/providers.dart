@@ -24,13 +24,27 @@ final databaseProvider = FutureProvider<FinanceDatabase>((ref) async {
   return db;
 });
 
-/// Light, dark or follow the system. Starts on system; the style sheet has a
-/// switch to try both.
+/// Light, dark or follow the system. Starts on system, then whatever you
+/// picked last time.
 class ThemeModeController extends Notifier<ThemeMode> {
-  @override
-  ThemeMode build() => ThemeMode.system;
+  static const _key = 'theme_mode';
 
-  void set(ThemeMode mode) => state = mode;
+  @override
+  ThemeMode build() {
+    _load();
+    return ThemeMode.system;
+  }
+
+  Future<void> _load() async {
+    final saved = await ref.read(secretStoreProvider).read(_key);
+    final mode = ThemeMode.values.where((m) => m.name == saved).firstOrNull;
+    if (mode != null && ref.mounted) state = mode;
+  }
+
+  void set(ThemeMode mode) {
+    state = mode;
+    ref.read(secretStoreProvider).write(_key, mode.name);
+  }
 }
 
 final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(

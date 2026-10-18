@@ -33,9 +33,44 @@ const _icons = <String, IconData>{
   'add_card': Icons.add_card_rounded,
   'swap_horiz': Icons.swap_horiz_rounded,
   'credit_card': Icons.credit_card_rounded,
+  'pets': Icons.pets_rounded,
+  'fitness_center': Icons.fitness_center_rounded,
+  'child_care': Icons.child_care_rounded,
+  'flight': Icons.flight_rounded,
+  'train': Icons.train_rounded,
+  'local_cafe': Icons.local_cafe_rounded,
+  'local_bar': Icons.local_bar_rounded,
+  'sports_esports': Icons.sports_esports_rounded,
+  'card_giftcard': Icons.card_giftcard_rounded,
+  'laptop': Icons.laptop_rounded,
+  'phone_android': Icons.phone_android_rounded,
+  'checkroom': Icons.checkroom_rounded,
+  'local_laundry_service': Icons.local_laundry_service_rounded,
+  'build': Icons.build_rounded,
+  'volunteer_activism': Icons.volunteer_activism_rounded,
+  'work': Icons.work_rounded,
+  'account_balance_wallet': Icons.account_balance_wallet_rounded,
+  'directions_bike': Icons.directions_bike_rounded,
+  'music_note': Icons.music_note_rounded,
+  'menu_book': Icons.menu_book_rounded,
+  'celebration': Icons.celebration_rounded,
+  'local_pharmacy': Icons.local_pharmacy_rounded,
+  'family_restroom': Icons.family_restroom_rounded,
+  'attach_money': Icons.attach_money_rounded,
 };
 
-IconData categoryIcon(Category c) => _icons[c.icon] ?? Icons.label_rounded;
+/// Icon names offered when you add or edit a category.
+final categoryIconNames = List<String>.unmodifiable(_icons.keys);
+
+/// The chart colours a category can take.
+const categoryColorTokens = [
+  'chart1', 'chart2', 'chart3', 'chart4', //
+  'chart5', 'chart6', 'chart7', 'chart8',
+];
+
+IconData iconNamed(String name) => _icons[name] ?? Icons.label_rounded;
+
+IconData categoryIcon(Category c) => iconNamed(c.icon);
 
 /// A round category badge in the category's chart colour.
 class CategoryBadge extends StatelessWidget {

@@ -36,7 +36,7 @@ class FinanceDatabase extends _$FinanceDatabase {
   /// `dart run drift_dev make-migrations` (from packages/finance_data) to
   /// snapshot the schema and generate a migration test.
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -49,6 +49,9 @@ class FinanceDatabase extends _$FinanceDatabase {
         await m.addColumn(transactions, transactions.flowReason);
         await m.addColumn(transactions, transactions.transferPairId);
         await m.create(transactionsAccountDate);
+      }
+      if (from < 3 && to >= 3) {
+        await m.addColumn(accounts, accounts.openingBalancePaise);
       }
     },
     beforeOpen: (details) async {

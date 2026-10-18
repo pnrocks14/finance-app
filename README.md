@@ -6,7 +6,7 @@ up and categorised on the device, and turn into clear pictures of where the mont
 went. There is no server. AI is used only when you tap a button, and nothing it
 suggests changes your data until you approve it.
 
-Status: **Phase 4** (main screens). Phase 1 built the scaffold, the encrypted
+Status: **Phase 4b** (analytics dashboard). Phase 1 built the scaffold, the encrypted
 database, the app lock (PIN plus fingerprint), the design system and a style sheet
 screen. Phase 2 adds CSV statement import with presets for HDFC, ICICI, SBI, Axis
 and Kotak (checked against a real Kotak export), a column mapper for other banks,
@@ -19,7 +19,13 @@ dictionary of Indian merchants, your own rules made by changing a category,
 and "see why" for every category. Phase 4 makes home diagram-first (what's
 left of the month's income, a category donut, a spend curve against last
 month) and adds filters, search and a queue for sorting uncategorised
-transactions. Reading SMS, budgets and AI arrive next. The plan lives in
+transactions. Phase 4b turns home into an analytics dashboard (week, month
+or year; money in, out and the difference; per-category bars with
+percentages; a trend line; a day-by-day calendar; balances and budgets) and
+adds tabs for records, budgets, accounts and categories, adding spends,
+income and transfers by hand with a calculator keypad, your own categories,
+monthly budgets and a saved dark mode. Reading SMS, goals and AI arrive
+next. The plan lives in
 [the plan doc](https://claude.ai/code/artifact/d641d641-c3c2-44a0-8234-2bcf6671e465).
 
 ## Repository layout

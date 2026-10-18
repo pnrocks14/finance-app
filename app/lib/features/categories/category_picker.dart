@@ -20,6 +20,7 @@ Future<CategoryChoice?> showCategoryPicker(
   String? payee,
 }) => showModalBottomSheet<CategoryChoice>(
   context: context,
+  useRootNavigator: true,
   isScrollControlled: true,
   showDragHandle: true,
   builder: (_) => _CategoryPicker(

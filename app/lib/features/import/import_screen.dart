@@ -362,7 +362,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           _Step.report => ImportReport(
             outcome: _outcome!,
             rowLabel: _pdf != null ? 'Entry' : 'Line',
-            onDone: () => context.go('/transactions'),
+            onDone: () => context.go('/records'),
             onImportAnother: _startOver,
           ),
         },
