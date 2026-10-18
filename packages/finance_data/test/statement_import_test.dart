@@ -116,7 +116,10 @@ void main() {
     expect(debit.transferPairId, credit.id);
     expect(credit.transferPairId, debit.id);
     expect(debit.flowReason, FlowReason.transferPair);
-    expect(debit.version, 2);
+    // Changed twice: marked as a transfer, then moved to "Between your
+    // accounts".
+    expect(debit.version, 3);
+    expect(debit.categoryId, Cat.ownTransfers);
   });
 
   test('a flow you set by hand is never overwritten', () async {

@@ -84,6 +84,10 @@ class _Overview extends ConsumerWidget {
     final c = context.colors;
     final accounts = ref.watch(accountsProvider).value ?? const [];
     final names = {for (final a in accounts) a.id: a.displayName};
+    final categories = {
+      for (final c in ref.watch(categoriesProvider).value ?? const <Category>[])
+        c.id: c,
+    };
 
     // The month of the newest transaction, so a past statement still shows.
     final latest = transactions.first.localDate;
@@ -149,7 +153,11 @@ class _Overview extends ConsumerWidget {
           ),
         ),
         for (final t in transactions.take(6))
-          TransactionTile(transaction: t, accountName: names[t.accountId]),
+          TransactionTile(
+            transaction: t,
+            accountName: names[t.accountId],
+            category: categories[t.categoryId],
+          ),
       ],
     );
   }

@@ -47,6 +47,13 @@ Paid by Unity Small Finance Bank Ltd XX65 | RuPay credit card
 ₹1,000
 ''';
 
+// Two Swiggy orders, made up.
+const _twoSwiggy = '''
+Date,Narration,Chq./Ref.No.,Value Dt,Withdrawal Amt.,Deposit Amt.,Closing Balance
+01/10/26,UPI-SWIGGY-swiggy@ybl-YESB0000001-412233445566-Payment,0000412233445566,01/10/26,450.00,,"24,550.00"
+03/10/26,UPI-SWIGGY-swiggy@ybl-YESB0000001-412233445577-Payment,0000412233445577,03/10/26,300.00,,"24,250.00"
+''';
+
 class FakePicker implements StatementFilePicker {
   FakePicker(this.text, {this.name = 'october.csv'});
   final String text;
@@ -124,8 +131,58 @@ void main() {
     expect(find.text('Acme Technologies Pvt Ltd'), findsOneWidget);
     await tester.tap(find.text('Swiggy'));
     await tester.pumpAndSettle();
-    expect(find.text('Why it counts this way'), findsOneWidget);
-    expect(find.text('swiggy@ybl'), findsOneWidget);
+    expect(find.text('Food delivery'), findsWidgets);
+    expect(
+      find.text('"swiggy" looks like a food delivery app.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('change a category for a payee, then undo the rule', (
+    tester,
+  ) async {
+    final store = MemorySecretStore();
+    await PinLock(store, iterations: 1000).setPin('4826');
+    final container = testContainer(store);
+    addTearDown(container.dispose);
+    final db = await container.read(databaseProvider.future);
+    final account = await AccountsRepository(db).create(
+      kind: AccountKind.bankAccount,
+      institution: 'HDFC Bank',
+      displayName: 'HDFC Savings',
+    );
+    await StatementImporter(db)
+        .import(accountId: account.id, result: parseStatement(_twoSwiggy));
+    await pumpApp(tester, container);
+    await typePin(tester, '4826');
+    await tester.tap(find.text('See all'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Food delivery ·'), findsNWidgets(2));
+
+    await tester.tap(find.text('Swiggy').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    expect(find.text('Always for Swiggy'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Eating out'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 more from Swiggy'), findsOneWidget);
+    expect(find.text('You picked this.'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10)); // close the sheet
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Eating out ·'), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('Your rules'));
+    await tester.pumpAndSettle();
+    expect(find.text('Paid to swiggy'), findsOneWidget);
+    await tester.tap(find.byTooltip('Delete rule'));
+    await tester.pumpAndSettle();
+    expect(find.text('No rules yet'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    // The one you picked by hand stays; the other goes back to the guess.
+    expect(find.textContaining('Eating out ·'), findsOneWidget);
+    expect(find.textContaining('Food delivery ·'), findsOneWidget);
   });
 
   testWidgets('importing the same file again adds nothing', (tester) async {

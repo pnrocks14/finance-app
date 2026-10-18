@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/categories/rules_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/import/import_screen.dart';
 import '../features/lock/lock_controller.dart';
@@ -43,6 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/transactions',
         builder: (_, _) => const TransactionsScreen(),
       ),
+      GoRoute(path: '/rules', builder: (_, _) => const RulesScreen()),
       GoRoute(
         path: '/style-sheet',
         builder: (_, _) => const StyleSheetScreen(),

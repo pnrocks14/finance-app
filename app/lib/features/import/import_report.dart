@@ -76,6 +76,17 @@ class ImportReport extends StatelessWidget {
                 "your own accounts, so they won't count as spending or income.",
           ),
         ],
+        if (outcome.needsCategory > 0) ...[
+          const SizedBox(height: Space.m),
+          _Note(
+            icon: Icons.label_outline_rounded,
+            color: c.primary,
+            text:
+                '${outcome.needsCategory} transactions need a category. Tap '
+                'one in your transactions to pick it; the app learns the '
+                'payee for next time.',
+          ),
+        ],
         if (outcome.errors.isNotEmpty) ...[
           const SectionHeader("Rows we couldn't read"),
           Text(

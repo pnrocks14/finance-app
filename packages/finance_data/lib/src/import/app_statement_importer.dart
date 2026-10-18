@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:finance_core/finance_core.dart';
 
+import '../categories/category_service.dart';
 import '../db/database.dart';
 import 'ledger_links.dart';
 import 'statement_importer.dart';
@@ -166,14 +167,22 @@ class AppStatementImporter {
         linked ? matched++ : created++;
       }
 
-      final transfers = result.rows.isEmpty
+      final from = result.periodFrom?.addDays(
+        -StatementImporter.transferSearchDays,
+      );
+      final to = result.periodTo?.addDays(StatementImporter.transferSearchDays);
+      final transfers = from == null || to == null
           ? 0
-          : await markTransfers(
-              _db,
-              result.periodFrom!.addDays(-StatementImporter.transferSearchDays),
-              result.periodTo!.addDays(StatementImporter.transferSearchDays),
-              now,
-            );
+          : await markTransfers(_db, from, to, now);
+      final categories = CategoryService(_db, clock: _clock);
+      var needsCategory = 0;
+      if (from != null && to != null) {
+        await categories.recategorize(from: from, to: to);
+        needsCategory = await categories.countNeedingCategory(
+          result.periodFrom!,
+          result.periodTo!,
+        );
+      }
 
       final warnings = [
         if (result.totalsMatch == false)
@@ -210,6 +219,7 @@ class AppStatementImporter {
         errors: result.errors,
         balanceWarnings: const [],
         transfersMarked: transfers,
+        needsCategory: needsCategory,
       );
     });
   }

@@ -2,6 +2,7 @@
 /// secure key store. Implements the storage interfaces `finance_core` defines.
 library;
 
+export 'src/categories/category_service.dart';
 export 'src/db/connection.dart';
 export 'src/db/database.dart';
 export 'src/db/open_app_database.dart';
