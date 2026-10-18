@@ -3,6 +3,9 @@ import 'package:finance_core/finance_core.dart';
 
 import '../db/database.dart';
 
+/// The order a list shows transactions in.
+enum TransactionSort { newest, oldest, largest, smallest }
+
 /// Which transactions a list shows. Every field left null means "any".
 final class TransactionFilter {
   const TransactionFilter({
@@ -14,6 +17,7 @@ final class TransactionFilter {
     this.needsCategory = false,
     this.direction,
     this.search,
+    this.sort = TransactionSort.newest,
   });
 
   /// Any day in the month; only that IST calendar month is shown.
@@ -32,6 +36,7 @@ final class TransactionFilter {
 
   /// Matched against the payee, UPI ID and narration, ignoring case.
   final String? search;
+  final TransactionSort sort;
 
   bool get isEmpty =>
       month == null &&
@@ -52,6 +57,7 @@ final class TransactionFilter {
     bool? needsCategory,
     Direction? Function()? direction,
     String? Function()? search,
+    TransactionSort? sort,
   }) => TransactionFilter(
     month: month == null ? this.month : month(),
     from: from == null ? this.from : from(),
@@ -61,6 +67,7 @@ final class TransactionFilter {
     needsCategory: needsCategory ?? this.needsCategory,
     direction: direction == null ? this.direction : direction(),
     search: search == null ? this.search : search(),
+    sort: sort ?? this.sort,
   );
 
   @override
@@ -73,7 +80,8 @@ final class TransactionFilter {
       other.categoryId == categoryId &&
       other.needsCategory == needsCategory &&
       other.direction == direction &&
-      other.search == search;
+      other.search == search &&
+      other.sort == sort;
 
   @override
   int get hashCode => Object.hash(
@@ -85,6 +93,7 @@ final class TransactionFilter {
     needsCategory,
     direction,
     search,
+    sort,
   );
 }
 
@@ -118,10 +127,24 @@ class TransactionsRepository {
   }) {
     final q = _db.select(_db.transactions)
       ..where((t) => t.deletedAt.isNull())
-      ..orderBy([
-        (t) => OrderingTerm.desc(t.localDate),
-        (t) => OrderingTerm.desc(t.createdAt),
-      ])
+      ..orderBy(switch (filter.sort) {
+        TransactionSort.newest => [
+          (t) => OrderingTerm.desc(t.localDate),
+          (t) => OrderingTerm.desc(t.createdAt),
+        ],
+        TransactionSort.oldest => [
+          (t) => OrderingTerm.asc(t.localDate),
+          (t) => OrderingTerm.asc(t.createdAt),
+        ],
+        TransactionSort.largest => [
+          (t) => OrderingTerm.desc(t.amountPaise),
+          (t) => OrderingTerm.desc(t.localDate),
+        ],
+        TransactionSort.smallest => [
+          (t) => OrderingTerm.asc(t.amountPaise),
+          (t) => OrderingTerm.desc(t.localDate),
+        ],
+      })
       ..limit(limit);
     if (filter.month case final m?) {
       final first = LocalDate(m.year, m.month, 1);

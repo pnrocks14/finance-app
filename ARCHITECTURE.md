@@ -249,8 +249,9 @@ Sheets open on the root navigator so they cover the tab bar.
   month, `SpendCurve` against last month and a `DayGrid` calendar; the
   three fullest budgets; and the latest transactions. Transfers never count
   and refunds come off the category they were filed under.
-- **Records** (and the pushed `/transactions`) filter by month or date
-  range, money in or out, category, account and "needs a category", plus a
+- **Records** (and the pushed `/transactions`) sort by date or amount
+  (`TransactionSort`; amount order drops the day headers and shows each
+  date) and filter by month or a date range you pick, money in or out, category, account and "needs a category", plus a
   search over payee, UPI ID and narration (`TransactionsRepository
   .watchFiltered`, in SQL). Routes carry the filter as query parameters
   (`/transactions?month=2026-10&category=cat.groceries`,

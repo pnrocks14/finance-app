@@ -240,5 +240,16 @@ void main() {
         )
         .first;
     expect(week.map((t) => t.localDate.day), [11, 5]);
+
+    final repo = TransactionsRepository(db);
+    Future<List<int>> sorted(TransactionSort sort) async => [
+      for (final t in await repo
+          .watchFiltered(TransactionFilter(sort: sort))
+          .first)
+        t.amountPaise ~/ 100,
+    ];
+    expect(await sorted(TransactionSort.largest), [12, 11, 5, 4]);
+    expect(await sorted(TransactionSort.smallest), [4, 5, 11, 12]);
+    expect(await sorted(TransactionSort.oldest), [4, 5, 11, 12]);
   });
 }

@@ -64,6 +64,9 @@ class TransactionsScreen extends ConsumerStatefulWidget {
   ConsumerState<TransactionsScreen> createState() => _TransactionsScreenState();
 }
 
+/// Stands for "Pick dates…" in the month sheet.
+final _customDates = LocalDate(1, 1, 1);
+
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   late var _filter = widget.initial;
   late final _search = TextEditingController(text: widget.initial.search);
@@ -122,27 +125,57 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final f = _filter;
 
     final chips = <Widget>[
-      if (f.from != null || f.to != null)
-        InputChip(
-          label: Text(
-            f.from == f.to
-                ? formatShortDate(f.from!)
-                : formatPeriod(f.from ?? f.to!, f.to ?? f.from!),
-          ),
-          selected: true,
-          showCheckmark: false,
-          deleteButtonTooltipMessage: 'Any date',
-          onDeleted: () => _set(f.copyWith(from: () => null, to: () => null)),
-        ),
       _FilterChip(
-        label: f.month == null ? 'All months' : formatMonth(f.month!),
-        active: f.month != null,
+        label: f.from != null || f.to != null
+            ? (f.from == f.to
+                  ? formatShortDate(f.from!)
+                  : formatPeriod(f.from ?? f.to!, f.to ?? f.from!))
+            : f.month == null
+            ? 'All months'
+            : formatMonth(f.month!),
+        active: f.month != null || f.from != null || f.to != null,
         onTap: () async {
-          final r = await _pick<LocalDate>('Month', [
+          final r = await _pick<LocalDate>('Dates', [
             (null, 'All months'),
+            (_customDates, 'Pick dates…'),
             for (final m in months) (m, formatMonth(m)),
-          ], f.month);
-          if (r != null) _set(f.copyWith(month: () => r.$1));
+          ], f.from != null || f.to != null ? _customDates : f.month);
+          if (r == null || !context.mounted) return;
+          if (r.$1 != _customDates) {
+            _set(
+              f.copyWith(month: () => r.$1, from: () => null, to: () => null),
+            );
+            return;
+          }
+          final today = DateTime.now();
+          final start = f.from ?? f.month;
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2000),
+            lastDate: DateTime(today.year + 1, 12, 31),
+            initialDateRange: start == null
+                ? null
+                : DateTimeRange(
+                    start: DateTime(start.year, start.month, start.day),
+                    end: switch (f.to) {
+                      final t? => DateTime(t.year, t.month, t.day),
+                      null => DateTime(
+                        start.year,
+                        start.month,
+                        f.month == null ? start.day : start.daysInMonth,
+                      ),
+                    },
+                  ),
+          );
+          if (range == null) return;
+          LocalDate day(DateTime d) => LocalDate(d.year, d.month, d.day);
+          _set(
+            _filter.copyWith(
+              month: () => null,
+              from: () => day(range.start),
+              to: () => day(range.end),
+            ),
+          );
         },
       ),
       _FilterChip(
@@ -192,6 +225,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         onSelected: (v) => _set(
           f.copyWith(needsCategory: v, categoryId: v ? () => null : null),
         ),
+      ),
+      _FilterChip(
+        label: switch (f.sort) {
+          TransactionSort.newest => 'Newest first',
+          TransactionSort.oldest => 'Oldest first',
+          TransactionSort.largest => 'Highest amount',
+          TransactionSort.smallest => 'Lowest amount',
+        },
+        active: f.sort != TransactionSort.newest,
+        onTap: () async {
+          final r = await _pick<TransactionSort>('Sort by', [
+            (TransactionSort.newest, 'Newest first'),
+            (TransactionSort.oldest, 'Oldest first'),
+            (TransactionSort.largest, 'Highest amount'),
+            (TransactionSort.smallest, 'Lowest amount'),
+          ], f.sort);
+          if (r?.$1 case final sort?) _set(f.copyWith(sort: sort));
+        },
       ),
     ];
 
@@ -283,7 +334,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       actionLabel: 'Clear filters',
                       onAction: () {
                         _search.clear();
-                        _set(const TransactionFilter());
+                        _set(TransactionFilter(sort: f.sort));
                       },
                     ),
                   );
@@ -301,9 +352,13 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       ' · ${formatInr(Paise(out), paise: PaiseDisplay.never)} out'
                       ' · ${formatInr(Paise(inn), paise: PaiseDisplay.never)} in',
                 ];
+                // Day headers only make sense in date order.
+                final byDate =
+                    f.sort == TransactionSort.newest ||
+                    f.sort == TransactionSort.oldest;
                 LocalDate? day;
                 for (final t in list) {
-                  if (t.localDate != day) {
+                  if (byDate && t.localDate != day) {
                     day = t.localDate;
                     items.add(day);
                   }
@@ -338,6 +393,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       transaction: t,
                       accountName: names[t.accountId],
                       category: categories[t.categoryId],
+                      showDate: !byDate,
                     ),
                     _ => const SizedBox.shrink(),
                   },
@@ -381,11 +437,15 @@ class TransactionTile extends StatelessWidget {
     required this.transaction,
     this.accountName,
     this.category,
+    this.showDate = false,
   });
 
   final Transaction transaction;
   final String? accountName;
   final Category? category;
+
+  /// Adds the date to the second line, for lists not grouped by day.
+  final bool showDate;
 
   @override
   Widget build(BuildContext context) {
@@ -396,6 +456,7 @@ class TransactionTile extends StatelessWidget {
     final byHand =
         t.flowReason == FlowReason.user && t.channel == Channel.other;
     final subtitle = [
+      if (showDate) formatShortDate(t.localDate),
       category?.name ?? 'Needs a category',
       byHand ? 'Added by you' : channelLabel(t.channel),
       ?accountName,
