@@ -9,6 +9,8 @@ Widget _wrap(Widget child, {ThemeData? theme}) => MaterialApp(
 );
 
 void main() {
+  dashboardTests();
+
   testWidgets('MoneyText shows Indian grouping and a spoken label', (
     tester,
   ) async {
@@ -148,5 +150,82 @@ void main() {
     );
     await tester.tap(find.text('Fuel'));
     expect(tapped, 1);
+  });
+}
+
+void dashboardTests() {
+  testWidgets('BreakdownRow shows the amount and share', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        BreakdownRow(
+          leading: const Icon(Icons.shopping_bag),
+          label: 'Shopping',
+          amount: Paise.rupees(1200),
+          share: 0.25,
+          color: Colors.teal,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Shopping, ₹1,200, 25%'), findsOneWidget);
+  });
+
+  testWidgets('DayGrid lays the month out from Monday', (tester) async {
+    LocalDate? tapped;
+    await tester.pumpWidget(
+      _wrap(
+        SizedBox(
+          width: 360,
+          child: DayGrid(
+            // 1 Oct 2026 is a Thursday.
+            month: LocalDate(2026, 10, 1),
+            values: [
+              for (var i = 0; i < 31; i++)
+                i == 4 ? Paise.rupees(1500) : Paise.zero,
+            ],
+            color: Colors.teal,
+            onTap: (d) => tapped = d,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('₹1.5K'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('5: ₹1,500'));
+    expect(tapped, LocalDate(2026, 10, 5));
+  });
+
+  testWidgets('TrendChart labels its highest and average', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        TrendChart(
+          values: [Paise.rupees(100), Paise.rupees(300), Paise.rupees(200)],
+          labels: const ['Mon', 'Sun'],
+          color: Colors.teal,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Highest ₹300, average ₹200'), findsOneWidget);
+  });
+
+  test('applyKey builds a sum one key at a time', () {
+    var s = '';
+    for (final k in ['0', '5', '.', '5', '5', '5', '+', '+', '−', '2']) {
+      s = applyKey(s, k);
+    }
+    expect(s, '5.55−2');
+    expect(applyKey('', '+'), '');
+    expect(applyKey('', '.'), '0.');
+    expect(applyKey('12', '⌫'), '1');
+    expect(evaluateAmount(s), Paise(355));
+  });
+
+  testWidgets('CalcKeypad sends keys', (tester) async {
+    final keys = <String>[];
+    await tester.pumpWidget(_wrap(CalcKeypad(onKey: keys.add)));
+    await tester.tap(find.text('7'));
+    await tester.tap(find.text('×'));
+    await tester.tap(find.bySemanticsLabel('Delete'));
+    expect(keys, ['7', '×', '⌫']);
   });
 }

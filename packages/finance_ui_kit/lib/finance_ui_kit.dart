@@ -7,6 +7,7 @@ library;
 
 export 'src/components/basics.dart';
 export 'src/components/charts.dart';
+export 'src/components/dashboard.dart';
 export 'src/components/empty_state.dart';
 export 'src/components/money_text.dart';
 export 'src/components/pin_pad.dart';

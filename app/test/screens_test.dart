@@ -62,13 +62,15 @@ void main() {
     );
     expect(find.text('2 transactions need a category'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('Groceries'),
-      200,
-      scrollable: _home,
+    // Biggest first: groceries, then the two unsorted, then food delivery.
+    for (final name in ['Groceries', 'Needs a category', 'Food delivery']) {
+      await tester.scrollUntilVisible(find.text(name), 200, scrollable: _home);
+      await tester.pumpAndSettle();
+    }
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Food delivery, ₹450, 15%')),
+      findsOneWidget,
     );
-    expect(find.text('Food delivery'), findsWidgets);
-    expect(find.text('Needs a category'), findsWidgets);
     await tester.scrollUntilVisible(
       find.textContaining('than last month by this day'),
       200,

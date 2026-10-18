@@ -56,6 +56,11 @@ class Accounts extends Table with RowMeta {
   TextColumn get smsSenderIds =>
       text().map(const JsonListConverter()).withDefault(const Constant('[]'))();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+
+  /// What the account held before its first transaction here; the balance
+  /// shown is this plus money in less money out.
+  IntColumn get openingBalancePaise =>
+      integer().withDefault(const Constant(0))();
 }
 
 /// One statement import or one SMS backfill run, with its error report.

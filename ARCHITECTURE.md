@@ -233,20 +233,48 @@ user taps "Ask AI" ─▶ build minimal, redacted context ─▶ provider adapte
   has a "see why" that shows the numbers behind it.
 - Material 3 is used on Android. `UiStyle` leaves room for Cupertino on iOS later.
 
-### Screens (phase 4)
+### Screens (phase 4 and 4b)
 
-- **Home** shows one IST month (switch with the arrows): a ring of what's left
-  of that month's income after spending, the "needs a category" count, a
-  category donut whose legend opens the filtered list, and `SpendCurve`, the
-  running total against last month by the same day. Totals come from
-  `summarizeMonth` in `finance_core`: transfers never count and refunds come
-  off the category they were filed under.
-- **Transactions** filter by month, money in or out, category, account and
-  "needs a category", plus a search over payee, UPI ID and narration
-  (`TransactionsRepository.watchFiltered`, in SQL). Routes carry the filter
-  as query parameters (`/transactions?month=2026-10&category=cat.groceries`).
+Five tabs along the bottom (`AppShell`, a go_router `StatefulShellRoute`, so
+each tab keeps its place): Home, Records, Budgets, Accounts and Categories.
+Sheets open on the root navigator so they cover the tab bar.
+
+- **Home** is the analytics dashboard for an IST week (Monday first), month
+  or year (`Period`, `summarizePeriod` in `finance_core`): spent, came in
+  and the difference (tap either of the first two to switch the breakdown),
+  against the previous period; for a month, a ring of what's left of the
+  income; the "needs a category" count; account balances; a donut with a
+  `BreakdownRow` per category (amount, bar, percent) that opens the
+  filtered list; a `TrendChart` per day or month with its average; for a
+  month, `SpendCurve` against last month and a `DayGrid` calendar; the
+  three fullest budgets; and the latest transactions. Transfers never count
+  and refunds come off the category they were filed under.
+- **Records** (and the pushed `/transactions`) filter by month or date
+  range, money in or out, category, account and "needs a category", plus a
+  search over payee, UPI ID and narration (`TransactionsRepository
+  .watchFiltered`, in SQL). Routes carry the filter as query parameters
+  (`/transactions?month=2026-10&category=cat.groceries`,
+  `?from=2026-10-05&to=2026-10-11`).
+- **Add** (`/add`) records an expense, income or transfer by hand
+  (`ManualEntries`): a `CalcKeypad` whose sum `evaluateAmount` works out in
+  exact paise, account and category pickers, a note, date and time. A
+  transfer is two linked rows with `flow = transfer`. A category you pick is
+  `manual`, so the categoriser never changes it. Entries with no
+  `transaction_sources` row are yours and can be removed (soft delete).
+- **Budgets** set one monthly limit per spending category (`budgets` table,
+  `BudgetsRepository`), shown against the month's spending with
+  `budgetMonth`, plus "Not budgeted this month".
+- **Accounts** list balances by kind (bank, card, cash, wallet,
+  investment). A balance is `opening_balance_paise` (schema v3) plus money in
+  less money out, worked out in SQL (`watchBalances`).
+- **Categories** lists money out, money in and transfers. You can add your
+  own (name, fixed or flexible, icon, colour), edit any, set a budget, or
+  remove one you added: its transactions go back to "Needs a category" and
+  its rules and budget go too. Built-in ones can't be removed.
 - **Sort** (`/sort`) is the labelling queue: one transaction at a time, with
   the guess if there is one, "Always for <payee>", and skip.
+- **Appearance** (home's toolbar) picks light, dark or same as phone; the
+  choice is kept in `SecretStore` so no extra storage plugin is needed.
 
 ## App lock
 

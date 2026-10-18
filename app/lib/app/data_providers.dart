@@ -86,3 +86,56 @@ final statementFilePickerProvider = Provider<StatementFilePicker>(
 final pdfTextExtractorProvider = Provider<PdfTextExtractor>(
   (ref) => const PdfiumTextExtractor(),
 );
+
+final budgetsRepositoryProvider = FutureProvider<BudgetsRepository>(
+  (ref) async => BudgetsRepository(await ref.watch(databaseProvider.future)),
+);
+
+/// Category id to its monthly limit.
+final budgetLimitsProvider = StreamProvider<Map<String, Paise>>((ref) async* {
+  final repo = await ref.watch(budgetsRepositoryProvider.future);
+  yield* repo.watchLimits();
+});
+
+final manualEntriesProvider = FutureProvider<ManualEntries>(
+  (ref) async => ManualEntries(await ref.watch(databaseProvider.future)),
+);
+
+/// Each account's balance, by account id.
+final accountBalancesProvider = StreamProvider<Map<String, Paise>>((
+  ref,
+) async* {
+  final repo = await ref.watch(accountsRepositoryProvider.future);
+  yield* repo.watchBalances();
+});
+
+/// Whether a transaction was added by hand, so it can be removed.
+final isManualProvider = FutureProvider.family<bool, String>((ref, id) async {
+  final entries = await ref.watch(manualEntriesProvider.future);
+  return entries.isManual(id);
+});
+
+/// What a summary needs from each transaction.
+List<MoneyMove> movesOf(Iterable<Transaction> list) => [
+  for (final t in list)
+    MoneyMove(
+      date: t.localDate,
+      amount: Paise(t.amountPaise),
+      flow: t.flow,
+      categoryId: t.categoryId,
+    ),
+];
+
+/// Money in and out over a week, month or year, kept up to date.
+final periodSummaryProvider = StreamProvider.family<PeriodSummary, Period>((
+  ref,
+  period,
+) async* {
+  final repo = await ref.watch(transactionsRepositoryProvider.future);
+  yield* repo
+      .watchFiltered(
+        TransactionFilter(from: period.start, to: period.end),
+        limit: 100000,
+      )
+      .map((list) => summarizePeriod(movesOf(list), period));
+});

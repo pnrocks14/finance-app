@@ -73,7 +73,9 @@ void main() {
     await pumpApp(tester, container);
     await typePin(tester, '4826');
 
-    await tester.tap(find.byTooltip('Style sheet'));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Style sheet'));
     await tester.pumpAndSettle();
     expect(find.text('Style sheet'), findsOneWidget);
     expect(find.text('₹3,100 left'), findsOneWidget);

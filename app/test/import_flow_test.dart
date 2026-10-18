@@ -113,6 +113,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('HDFC Bank'));
     await tester.pump();
+    await tester.ensureVisible(find.text('Add account'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Add account'));
     await tester.pumpAndSettle();
 

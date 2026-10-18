@@ -19,21 +19,35 @@ class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({
     super.key,
     this.initial = const TransactionFilter(),
+    this.title = 'Transactions',
   });
 
   /// The filter to open with, e.g. from a tap on the home donut.
   final TransactionFilter initial;
+  final String title;
 
-  /// Reads `month=2026-10`, `category=<id>`, `account=<id>`, `needs=1`,
-  /// `direction=debit|credit` and `q=<text>` from a route.
+  /// Reads `month=2026-10`, `from=2026-10-01`, `to=2026-10-07`,
+  /// `category=<id>`, `account=<id>`, `needs=1`, `direction=debit|credit`
+  /// and `q=<text>` from a route.
   static TransactionFilter filterFrom(Map<String, String> q) {
     LocalDate? month;
     final m = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(q['month'] ?? '');
     if (m != null) {
       month = LocalDate(int.parse(m[1]!), int.parse(m[2]!), 1);
     }
+    LocalDate? day(String? s) {
+      if (s == null) return null;
+      try {
+        return LocalDate.parse(s);
+      } on FormatException {
+        return null;
+      }
+    }
+
     return TransactionFilter(
       month: month,
+      from: day(q['from']),
+      to: day(q['to']),
       accountId: q['account'],
       categoryId: q['category'],
       needsCategory: q['needs'] == '1',
@@ -70,6 +84,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     T? now,
   ) => showModalBottomSheet<(T?,)>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (context) => DraggableScrollableSheet(
@@ -107,6 +122,18 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final f = _filter;
 
     final chips = <Widget>[
+      if (f.from != null || f.to != null)
+        InputChip(
+          label: Text(
+            f.from == f.to
+                ? formatShortDate(f.from!)
+                : formatPeriod(f.from ?? f.to!, f.to ?? f.from!),
+          ),
+          selected: true,
+          showCheckmark: false,
+          deleteButtonTooltipMessage: 'Any date',
+          onDeleted: () => _set(f.copyWith(from: () => null, to: () => null)),
+        ),
       _FilterChip(
         label: f.month == null ? 'All months' : formatMonth(f.month!),
         active: f.month != null,
@@ -169,8 +196,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     ];
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'add-${widget.title}',
+        tooltip: 'Add a transaction',
+        onPressed: () => context.push('/add'),
+        child: const Icon(Icons.add_rounded),
+      ),
       appBar: AppBar(
-        title: const Text('Transactions'),
+        title: Text(widget.title),
         actions: [
           IconButton(
             tooltip: 'Your rules',
@@ -360,9 +393,11 @@ class TransactionTile extends StatelessWidget {
     final c = context.colors;
     final theme = Theme.of(context).textTheme;
     final transfer = t.flow == TransactionFlow.transfer;
+    final byHand =
+        t.flowReason == FlowReason.user && t.channel == Channel.other;
     final subtitle = [
       category?.name ?? 'Needs a category',
-      channelLabel(t.channel),
+      byHand ? 'Added by you' : channelLabel(t.channel),
       ?accountName,
     ].join(' · ');
     return InkWell(
@@ -445,6 +480,7 @@ Future<void> showTransactionDetail(
   String? accountName,
 ) => showModalBottomSheet<void>(
   context: context,
+  useRootNavigator: true,
   isScrollControlled: true,
   showDragHandle: true,
   builder: (_) =>
@@ -474,7 +510,8 @@ class _TransactionDetail extends ConsumerWidget {
     final facts = <(String, String)>[
       ('Date', formatShortDate(t.localDate)),
       if (accountName != null) ('Account', accountName!),
-      ('Paid by', channelLabel(t.channel)),
+      if (t.flowReason != FlowReason.user || t.channel != Channel.other)
+        ('Paid by', channelLabel(t.channel)),
       if (t.vpa != null) ('UPI ID', t.vpa!),
       if (t.upiRef != null) ('UPI ref', t.upiRef!),
       if (t.bankRef != null) ('Bank ref', t.bankRef!),
@@ -482,6 +519,35 @@ class _TransactionDetail extends ConsumerWidget {
     ];
     final input = categorizeInputOf(t);
     final canRemember = ruleForCorrection(input) != null;
+    final manual = ref.watch(isManualProvider(t.id)).value ?? false;
+
+    Future<void> remove() async {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove this entry?'),
+          content: Text(
+            t.flow == TransactionFlow.transfer
+                ? 'Both sides of the transfer go.'
+                : 'It comes off your totals and balances.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final entries = await ref.read(manualEntriesProvider.future);
+      await entries.delete(t.id);
+      if (context.mounted) Navigator.of(context).pop();
+    }
 
     Future<void> change() async {
       final choice = await showCategoryPicker(
@@ -568,7 +634,7 @@ class _TransactionDetail extends ConsumerWidget {
               ],
             ),
           ),
-          const SectionHeader('What we read'),
+          SectionHeader(manual ? 'Details' : 'What we read'),
           for (final (k, v) in facts)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.xs),
@@ -580,9 +646,23 @@ class _TransactionDetail extends ConsumerWidget {
                 ],
               ),
             ),
+          if (t.notes != null) ...[
+            const SectionHeader('Note'),
+            Text(t.notes!, style: theme.bodyMedium),
+          ],
           if (t.descriptionRaw != null) ...[
             const SectionHeader('From your statement'),
             SelectableText(t.descriptionRaw!, style: theme.bodySmall),
+          ],
+          if (manual) ...[
+            const SizedBox(height: Space.xl),
+            PillButton(
+              label: 'Remove this entry',
+              kind: PillButtonKind.secondary,
+              icon: Icons.delete_outline_rounded,
+              expand: true,
+              onPressed: remove,
+            ),
           ],
         ],
       ),

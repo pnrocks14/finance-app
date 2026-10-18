@@ -666,6 +666,17 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _openingBalancePaiseMeta =
+      const VerificationMeta('openingBalancePaise');
+  @override
+  late final GeneratedColumn<int> openingBalancePaise = GeneratedColumn<int>(
+    'opening_balance_paise',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -679,6 +690,7 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     upiHandles,
     smsSenderIds,
     isArchived,
+    openingBalancePaise,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -753,6 +765,15 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         isArchived.isAcceptableOrUnknown(data['is_archived']!, _isArchivedMeta),
       );
     }
+    if (data.containsKey('opening_balance_paise')) {
+      context.handle(
+        _openingBalancePaiseMeta,
+        openingBalancePaise.isAcceptableOrUnknown(
+          data['opening_balance_paise']!,
+          _openingBalancePaiseMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -812,6 +833,10 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_archived'],
       )!,
+      openingBalancePaise: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}opening_balance_paise'],
+      )!,
     );
   }
 
@@ -849,6 +874,10 @@ class Account extends DataClass implements Insertable<Account> {
   /// SMS sender ids that belong to this account, e.g. `VM-HDFCBK`.
   final List<Object?> smsSenderIds;
   final bool isArchived;
+
+  /// What the account held before its first transaction here; the balance
+  /// shown is this plus money in less money out.
+  final int openingBalancePaise;
   const Account({
     required this.id,
     required this.createdAt,
@@ -861,6 +890,7 @@ class Account extends DataClass implements Insertable<Account> {
     required this.upiHandles,
     required this.smsSenderIds,
     required this.isArchived,
+    required this.openingBalancePaise,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -888,6 +918,7 @@ class Account extends DataClass implements Insertable<Account> {
       );
     }
     map['is_archived'] = Variable<bool>(isArchived);
+    map['opening_balance_paise'] = Variable<int>(openingBalancePaise);
     return map;
   }
 
@@ -906,6 +937,7 @@ class Account extends DataClass implements Insertable<Account> {
       upiHandles: Value(upiHandles),
       smsSenderIds: Value(smsSenderIds),
       isArchived: Value(isArchived),
+      openingBalancePaise: Value(openingBalancePaise),
     );
   }
 
@@ -926,6 +958,9 @@ class Account extends DataClass implements Insertable<Account> {
       upiHandles: serializer.fromJson<List<Object?>>(json['upiHandles']),
       smsSenderIds: serializer.fromJson<List<Object?>>(json['smsSenderIds']),
       isArchived: serializer.fromJson<bool>(json['isArchived']),
+      openingBalancePaise: serializer.fromJson<int>(
+        json['openingBalancePaise'],
+      ),
     );
   }
   @override
@@ -943,6 +978,7 @@ class Account extends DataClass implements Insertable<Account> {
       'upiHandles': serializer.toJson<List<Object?>>(upiHandles),
       'smsSenderIds': serializer.toJson<List<Object?>>(smsSenderIds),
       'isArchived': serializer.toJson<bool>(isArchived),
+      'openingBalancePaise': serializer.toJson<int>(openingBalancePaise),
     };
   }
 
@@ -958,6 +994,7 @@ class Account extends DataClass implements Insertable<Account> {
     List<Object?>? upiHandles,
     List<Object?>? smsSenderIds,
     bool? isArchived,
+    int? openingBalancePaise,
   }) => Account(
     id: id ?? this.id,
     createdAt: createdAt ?? this.createdAt,
@@ -970,6 +1007,7 @@ class Account extends DataClass implements Insertable<Account> {
     upiHandles: upiHandles ?? this.upiHandles,
     smsSenderIds: smsSenderIds ?? this.smsSenderIds,
     isArchived: isArchived ?? this.isArchived,
+    openingBalancePaise: openingBalancePaise ?? this.openingBalancePaise,
   );
   Account copyWithCompanion(AccountsCompanion data) {
     return Account(
@@ -994,6 +1032,9 @@ class Account extends DataClass implements Insertable<Account> {
       isArchived: data.isArchived.present
           ? data.isArchived.value
           : this.isArchived,
+      openingBalancePaise: data.openingBalancePaise.present
+          ? data.openingBalancePaise.value
+          : this.openingBalancePaise,
     );
   }
 
@@ -1010,7 +1051,8 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('last4: $last4, ')
           ..write('upiHandles: $upiHandles, ')
           ..write('smsSenderIds: $smsSenderIds, ')
-          ..write('isArchived: $isArchived')
+          ..write('isArchived: $isArchived, ')
+          ..write('openingBalancePaise: $openingBalancePaise')
           ..write(')'))
         .toString();
   }
@@ -1028,6 +1070,7 @@ class Account extends DataClass implements Insertable<Account> {
     upiHandles,
     smsSenderIds,
     isArchived,
+    openingBalancePaise,
   );
   @override
   bool operator ==(Object other) =>
@@ -1043,7 +1086,8 @@ class Account extends DataClass implements Insertable<Account> {
           other.last4 == this.last4 &&
           other.upiHandles == this.upiHandles &&
           other.smsSenderIds == this.smsSenderIds &&
-          other.isArchived == this.isArchived);
+          other.isArchived == this.isArchived &&
+          other.openingBalancePaise == this.openingBalancePaise);
 }
 
 class AccountsCompanion extends UpdateCompanion<Account> {
@@ -1058,6 +1102,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<List<Object?>> upiHandles;
   final Value<List<Object?>> smsSenderIds;
   final Value<bool> isArchived;
+  final Value<int> openingBalancePaise;
   final Value<int> rowid;
   const AccountsCompanion({
     this.id = const Value.absent(),
@@ -1071,6 +1116,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.upiHandles = const Value.absent(),
     this.smsSenderIds = const Value.absent(),
     this.isArchived = const Value.absent(),
+    this.openingBalancePaise = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AccountsCompanion.insert({
@@ -1085,6 +1131,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.upiHandles = const Value.absent(),
     this.smsSenderIds = const Value.absent(),
     this.isArchived = const Value.absent(),
+    this.openingBalancePaise = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -1104,6 +1151,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<String>? upiHandles,
     Expression<String>? smsSenderIds,
     Expression<bool>? isArchived,
+    Expression<int>? openingBalancePaise,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1118,6 +1166,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (upiHandles != null) 'upi_handles': upiHandles,
       if (smsSenderIds != null) 'sms_sender_ids': smsSenderIds,
       if (isArchived != null) 'is_archived': isArchived,
+      if (openingBalancePaise != null)
+        'opening_balance_paise': openingBalancePaise,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1134,6 +1184,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<List<Object?>>? upiHandles,
     Value<List<Object?>>? smsSenderIds,
     Value<bool>? isArchived,
+    Value<int>? openingBalancePaise,
     Value<int>? rowid,
   }) {
     return AccountsCompanion(
@@ -1148,6 +1199,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       upiHandles: upiHandles ?? this.upiHandles,
       smsSenderIds: smsSenderIds ?? this.smsSenderIds,
       isArchived: isArchived ?? this.isArchived,
+      openingBalancePaise: openingBalancePaise ?? this.openingBalancePaise,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1194,6 +1246,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (isArchived.present) {
       map['is_archived'] = Variable<bool>(isArchived.value);
     }
+    if (openingBalancePaise.present) {
+      map['opening_balance_paise'] = Variable<int>(openingBalancePaise.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1214,6 +1269,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('upiHandles: $upiHandles, ')
           ..write('smsSenderIds: $smsSenderIds, ')
           ..write('isArchived: $isArchived, ')
+          ..write('openingBalancePaise: $openingBalancePaise, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13056,6 +13112,7 @@ typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   Value<List<Object?>> upiHandles,
   Value<List<Object?>> smsSenderIds,
   Value<bool> isArchived,
+  Value<int> openingBalancePaise,
   Value<int> rowid,
 });
 typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
@@ -13070,6 +13127,7 @@ typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<List<Object?>> upiHandles,
   Value<List<Object?>> smsSenderIds,
   Value<bool> isArchived,
+  Value<int> openingBalancePaise,
   Value<int> rowid,
 });
 
@@ -13179,6 +13237,11 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<bool> get isArchived => $composableBuilder(
     column: $table.isArchived,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get openingBalancePaise => $composableBuilder(
+    column: $table.openingBalancePaise,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13296,6 +13359,11 @@ class $$AccountsTableOrderingComposer
     column: $table.isArchived,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get openingBalancePaise => $composableBuilder(
+    column: $table.openingBalancePaise,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AccountsTableAnnotationComposer
@@ -13349,6 +13417,11 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<bool> get isArchived => $composableBuilder(
     column: $table.isArchived,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get openingBalancePaise => $composableBuilder(
+    column: $table.openingBalancePaise,
     builder: (column) => column,
   );
 
@@ -13445,6 +13518,7 @@ class $$AccountsTableTableManager
                 Value<List<Object?>> upiHandles = const Value.absent(),
                 Value<List<Object?>> smsSenderIds = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
+                Value<int> openingBalancePaise = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AccountsCompanion(
                 id: id,
@@ -13458,6 +13532,7 @@ class $$AccountsTableTableManager
                 upiHandles: upiHandles,
                 smsSenderIds: smsSenderIds,
                 isArchived: isArchived,
+                openingBalancePaise: openingBalancePaise,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13473,6 +13548,7 @@ class $$AccountsTableTableManager
                 Value<List<Object?>> upiHandles = const Value.absent(),
                 Value<List<Object?>> smsSenderIds = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
+                Value<int> openingBalancePaise = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AccountsCompanion.insert(
                 id: id,
@@ -13486,6 +13562,7 @@ class $$AccountsTableTableManager
                 upiHandles: upiHandles,
                 smsSenderIds: smsSenderIds,
                 isArchived: isArchived,
+                openingBalancePaise: openingBalancePaise,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

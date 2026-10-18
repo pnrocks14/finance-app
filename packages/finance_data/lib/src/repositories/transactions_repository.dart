@@ -7,6 +7,8 @@ import '../db/database.dart';
 final class TransactionFilter {
   const TransactionFilter({
     this.month,
+    this.from,
+    this.to,
     this.accountId,
     this.categoryId,
     this.needsCategory = false,
@@ -16,6 +18,10 @@ final class TransactionFilter {
 
   /// Any day in the month; only that IST calendar month is shown.
   final LocalDate? month;
+
+  /// The first and last day to show, inclusive; either may be left open.
+  final LocalDate? from;
+  final LocalDate? to;
   final String? accountId;
   final String? categoryId;
 
@@ -29,6 +35,8 @@ final class TransactionFilter {
 
   bool get isEmpty =>
       month == null &&
+      from == null &&
+      to == null &&
       accountId == null &&
       categoryId == null &&
       !needsCategory &&
@@ -37,6 +45,8 @@ final class TransactionFilter {
 
   TransactionFilter copyWith({
     LocalDate? Function()? month,
+    LocalDate? Function()? from,
+    LocalDate? Function()? to,
     String? Function()? accountId,
     String? Function()? categoryId,
     bool? needsCategory,
@@ -44,6 +54,8 @@ final class TransactionFilter {
     String? Function()? search,
   }) => TransactionFilter(
     month: month == null ? this.month : month(),
+    from: from == null ? this.from : from(),
+    to: to == null ? this.to : to(),
     accountId: accountId == null ? this.accountId : accountId(),
     categoryId: categoryId == null ? this.categoryId : categoryId(),
     needsCategory: needsCategory ?? this.needsCategory,
@@ -55,6 +67,8 @@ final class TransactionFilter {
   bool operator ==(Object other) =>
       other is TransactionFilter &&
       other.month == month &&
+      other.from == from &&
+      other.to == to &&
       other.accountId == accountId &&
       other.categoryId == categoryId &&
       other.needsCategory == needsCategory &&
@@ -64,6 +78,8 @@ final class TransactionFilter {
   @override
   int get hashCode => Object.hash(
     month,
+    from,
+    to,
     accountId,
     categoryId,
     needsCategory,
@@ -111,6 +127,12 @@ class TransactionsRepository {
       final first = LocalDate(m.year, m.month, 1);
       final last = LocalDate(m.year, m.month, first.daysInMonth);
       q.where((t) => t.localDate.isBetweenValues(first.toIso(), last.toIso()));
+    }
+    if (filter.from case final d?) {
+      q.where((t) => t.localDate.isBiggerOrEqualValue(d.toIso()));
+    }
+    if (filter.to case final d?) {
+      q.where((t) => t.localDate.isSmallerOrEqualValue(d.toIso()));
     }
     if (filter.accountId case final id?) {
       q.where((t) => t.accountId.equals(id));
