@@ -35,13 +35,20 @@ class FinanceDatabase extends _$FinanceDatabase {
   /// `dart run drift_dev make-migrations` (from packages/finance_data) to
   /// snapshot the schema and generate a migration test.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
       await _createAuditLogGuards();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(transactions, transactions.flowReason);
+        await m.addColumn(transactions, transactions.transferPairId);
+        await m.create(transactionsAccountDate);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

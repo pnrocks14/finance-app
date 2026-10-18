@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/home/home_screen.dart';
+import '../features/import/import_screen.dart';
 import '../features/lock/lock_controller.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/style_sheet/style_sheet_screen.dart';
+import '../features/transactions/transactions_screen.dart';
 import 'splash_screen.dart';
 
 /// Routes. While the app is locked, every route redirects to the lock
@@ -36,6 +38,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/setup', builder: (_, _) => const PinSetupScreen()),
       GoRoute(path: '/unlock', builder: (_, _) => const UnlockScreen()),
       GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
+      GoRoute(path: '/import', builder: (_, _) => const ImportScreen()),
+      GoRoute(
+        path: '/transactions',
+        builder: (_, _) => const TransactionsScreen(),
+      ),
       GoRoute(
         path: '/style-sheet',
         builder: (_, _) => const StyleSheetScreen(),

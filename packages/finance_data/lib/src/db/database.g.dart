@@ -1221,7 +1221,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
 }
 
 class $ImportBatchesTable extends ImportBatches
-    with TableInfo<$ImportBatchesTable, ImportBatche> {
+    with TableInfo<$ImportBatchesTable, ImportBatch> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -1426,7 +1426,7 @@ class $ImportBatchesTable extends ImportBatches
   static const String $name = 'import_batches';
   @override
   VerificationContext validateIntegrity(
-    Insertable<ImportBatche> instance, {
+    Insertable<ImportBatch> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1521,9 +1521,9 @@ class $ImportBatchesTable extends ImportBatches
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  ImportBatche map(Map<String, dynamic> data, {String? tablePrefix}) {
+  ImportBatch map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ImportBatche(
+    return ImportBatch(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1622,7 +1622,7 @@ class $ImportBatchesTable extends ImportBatches
       const JsonListConverter();
 }
 
-class ImportBatche extends DataClass implements Insertable<ImportBatche> {
+class ImportBatch extends DataClass implements Insertable<ImportBatch> {
   /// UUID v7, created with `newId()`.
   final String id;
   final DateTime createdAt;
@@ -1648,7 +1648,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
 
   /// Rows that could not be parsed: row number, reason, redacted excerpt.
   final List<Object?> errors;
-  const ImportBatche({
+  const ImportBatch({
     required this.id,
     required this.createdAt,
     required this.updatedAt,
@@ -1741,12 +1741,12 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
     );
   }
 
-  factory ImportBatche.fromJson(
+  factory ImportBatch.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ImportBatche(
+    return ImportBatch(
       id: serializer.fromJson<String>(json['id']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1788,7 +1788,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
     };
   }
 
-  ImportBatche copyWith({
+  ImportBatch copyWith({
     String? id,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -1805,7 +1805,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
     int? matchedCount,
     int? createdCount,
     List<Object?>? errors,
-  }) => ImportBatche(
+  }) => ImportBatch(
     id: id ?? this.id,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1823,8 +1823,8 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
     createdCount: createdCount ?? this.createdCount,
     errors: errors ?? this.errors,
   );
-  ImportBatche copyWithCompanion(ImportBatchesCompanion data) {
-    return ImportBatche(
+  ImportBatch copyWithCompanion(ImportBatchesCompanion data) {
+    return ImportBatch(
       id: data.id.present ? data.id.value : this.id,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1858,7 +1858,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
 
   @override
   String toString() {
-    return (StringBuffer('ImportBatche(')
+    return (StringBuffer('ImportBatch(')
           ..write('id: $id, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1901,7 +1901,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is ImportBatche &&
+      (other is ImportBatch &&
           other.id == this.id &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -1920,7 +1920,7 @@ class ImportBatche extends DataClass implements Insertable<ImportBatche> {
           other.errors == this.errors);
 }
 
-class ImportBatchesCompanion extends UpdateCompanion<ImportBatche> {
+class ImportBatchesCompanion extends UpdateCompanion<ImportBatch> {
   final Value<String> id;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -1980,7 +1980,7 @@ class ImportBatchesCompanion extends UpdateCompanion<ImportBatche> {
        updatedAt = Value(updatedAt),
        kind = Value(kind),
        status = Value(status);
-  static Insertable<ImportBatche> custom({
+  static Insertable<ImportBatch> custom({
     Expression<String>? id,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -4625,6 +4625,27 @@ class $TransactionsTable extends Transactions
         requiredDuringInsert: true,
       ).withConverter<TransactionFlow>($TransactionsTable.$converterflow);
   @override
+  late final GeneratedColumnWithTypeConverter<FlowReason, String> flowReason =
+      GeneratedColumn<String>(
+        'flow_reason',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('direction'),
+      ).withConverter<FlowReason>($TransactionsTable.$converterflowReason);
+  static const VerificationMeta _transferPairIdMeta = const VerificationMeta(
+    'transferPairId',
+  );
+  @override
+  late final GeneratedColumn<String> transferPairId = GeneratedColumn<String>(
+    'transfer_pair_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
   late final GeneratedColumnWithTypeConverter<ReconciliationStatus, String>
   reconciliationStatus =
       GeneratedColumn<String>(
@@ -4681,6 +4702,8 @@ class $TransactionsTable extends Transactions
     categorizationRuleId,
     categorizationConfidence,
     flow,
+    flowReason,
+    transferPairId,
     reconciliationStatus,
     notes,
     deletedAt,
@@ -4824,6 +4847,15 @@ class $TransactionsTable extends Transactions
         ),
       );
     }
+    if (data.containsKey('transfer_pair_id')) {
+      context.handle(
+        _transferPairIdMeta,
+        transferPairId.isAcceptableOrUnknown(
+          data['transfer_pair_id']!,
+          _transferPairIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('notes')) {
       context.handle(
         _notesMeta,
@@ -4949,6 +4981,16 @@ class $TransactionsTable extends Transactions
           data['${effectivePrefix}flow'],
         )!,
       ),
+      flowReason: $TransactionsTable.$converterflowReason.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}flow_reason'],
+        )!,
+      ),
+      transferPairId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_pair_id'],
+      ),
       reconciliationStatus: $TransactionsTable.$converterreconciliationStatus
           .fromSql(
             attachedDatabase.typeMapping.read(
@@ -4988,6 +5030,8 @@ class $TransactionsTable extends Transactions
   );
   static TypeConverter<TransactionFlow, String> $converterflow =
       const WireEnumConverter(TransactionFlow.values);
+  static TypeConverter<FlowReason, String> $converterflowReason =
+      const WireEnumConverter(FlowReason.values);
   static TypeConverter<ReconciliationStatus, String>
   $converterreconciliationStatus = const WireEnumConverter(
     ReconciliationStatus.values,
@@ -5029,6 +5073,13 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String? categorizationRuleId;
   final double? categorizationConfidence;
   final TransactionFlow flow;
+
+  /// Why [flow] has its value, for "see why". Added in schema 2.
+  final FlowReason flowReason;
+
+  /// The other side of a transfer between your own accounts. Added in
+  /// schema 2.
+  final String? transferPairId;
   final ReconciliationStatus reconciliationStatus;
   final String? notes;
   final DateTime? deletedAt;
@@ -5056,6 +5107,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     this.categorizationRuleId,
     this.categorizationConfidence,
     required this.flow,
+    required this.flowReason,
+    this.transferPairId,
     required this.reconciliationStatus,
     this.notes,
     this.deletedAt,
@@ -5135,6 +5188,14 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       );
     }
     {
+      map['flow_reason'] = Variable<String>(
+        $TransactionsTable.$converterflowReason.toSql(flowReason),
+      );
+    }
+    if (!nullToAbsent || transferPairId != null) {
+      map['transfer_pair_id'] = Variable<String>(transferPairId);
+    }
+    {
       map['reconciliation_status'] = Variable<String>(
         $TransactionsTable.$converterreconciliationStatus.toSql(
           reconciliationStatus,
@@ -5197,6 +5258,10 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ? const Value.absent()
           : Value(categorizationConfidence),
       flow: Value(flow),
+      flowReason: Value(flowReason),
+      transferPairId: transferPairId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transferPairId),
       reconciliationStatus: Value(reconciliationStatus),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
@@ -5244,6 +5309,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         json['categorizationConfidence'],
       ),
       flow: serializer.fromJson<TransactionFlow>(json['flow']),
+      flowReason: serializer.fromJson<FlowReason>(json['flowReason']),
+      transferPairId: serializer.fromJson<String?>(json['transferPairId']),
       reconciliationStatus: serializer.fromJson<ReconciliationStatus>(
         json['reconciliationStatus'],
       ),
@@ -5280,6 +5347,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         categorizationConfidence,
       ),
       'flow': serializer.toJson<TransactionFlow>(flow),
+      'flowReason': serializer.toJson<FlowReason>(flowReason),
+      'transferPairId': serializer.toJson<String?>(transferPairId),
       'reconciliationStatus': serializer.toJson<ReconciliationStatus>(
         reconciliationStatus,
       ),
@@ -5312,6 +5381,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     Value<String?> categorizationRuleId = const Value.absent(),
     Value<double?> categorizationConfidence = const Value.absent(),
     TransactionFlow? flow,
+    FlowReason? flowReason,
+    Value<String?> transferPairId = const Value.absent(),
     ReconciliationStatus? reconciliationStatus,
     Value<String?> notes = const Value.absent(),
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -5349,6 +5420,10 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         ? categorizationConfidence.value
         : this.categorizationConfidence,
     flow: flow ?? this.flow,
+    flowReason: flowReason ?? this.flowReason,
+    transferPairId: transferPairId.present
+        ? transferPairId.value
+        : this.transferPairId,
     reconciliationStatus: reconciliationStatus ?? this.reconciliationStatus,
     notes: notes.present ? notes.value : this.notes,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -5398,6 +5473,12 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ? data.categorizationConfidence.value
           : this.categorizationConfidence,
       flow: data.flow.present ? data.flow.value : this.flow,
+      flowReason: data.flowReason.present
+          ? data.flowReason.value
+          : this.flowReason,
+      transferPairId: data.transferPairId.present
+          ? data.transferPairId.value
+          : this.transferPairId,
       reconciliationStatus: data.reconciliationStatus.present
           ? data.reconciliationStatus.value
           : this.reconciliationStatus,
@@ -5432,6 +5513,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('categorizationRuleId: $categorizationRuleId, ')
           ..write('categorizationConfidence: $categorizationConfidence, ')
           ..write('flow: $flow, ')
+          ..write('flowReason: $flowReason, ')
+          ..write('transferPairId: $transferPairId, ')
           ..write('reconciliationStatus: $reconciliationStatus, ')
           ..write('notes: $notes, ')
           ..write('deletedAt: $deletedAt')
@@ -5464,6 +5547,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     categorizationRuleId,
     categorizationConfidence,
     flow,
+    flowReason,
+    transferPairId,
     reconciliationStatus,
     notes,
     deletedAt,
@@ -5495,6 +5580,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.categorizationRuleId == this.categorizationRuleId &&
           other.categorizationConfidence == this.categorizationConfidence &&
           other.flow == this.flow &&
+          other.flowReason == this.flowReason &&
+          other.transferPairId == this.transferPairId &&
           other.reconciliationStatus == this.reconciliationStatus &&
           other.notes == this.notes &&
           other.deletedAt == this.deletedAt);
@@ -5524,6 +5611,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> categorizationRuleId;
   final Value<double?> categorizationConfidence;
   final Value<TransactionFlow> flow;
+  final Value<FlowReason> flowReason;
+  final Value<String?> transferPairId;
   final Value<ReconciliationStatus> reconciliationStatus;
   final Value<String?> notes;
   final Value<DateTime?> deletedAt;
@@ -5552,6 +5641,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.categorizationRuleId = const Value.absent(),
     this.categorizationConfidence = const Value.absent(),
     this.flow = const Value.absent(),
+    this.flowReason = const Value.absent(),
+    this.transferPairId = const Value.absent(),
     this.reconciliationStatus = const Value.absent(),
     this.notes = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -5581,6 +5672,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.categorizationRuleId = const Value.absent(),
     this.categorizationConfidence = const Value.absent(),
     required TransactionFlow flow,
+    this.flowReason = const Value.absent(),
+    this.transferPairId = const Value.absent(),
     required ReconciliationStatus reconciliationStatus,
     this.notes = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -5619,6 +5712,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? categorizationRuleId,
     Expression<double>? categorizationConfidence,
     Expression<String>? flow,
+    Expression<String>? flowReason,
+    Expression<String>? transferPairId,
     Expression<String>? reconciliationStatus,
     Expression<String>? notes,
     Expression<DateTime>? deletedAt,
@@ -5650,6 +5745,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (categorizationConfidence != null)
         'categorization_confidence': categorizationConfidence,
       if (flow != null) 'flow': flow,
+      if (flowReason != null) 'flow_reason': flowReason,
+      if (transferPairId != null) 'transfer_pair_id': transferPairId,
       if (reconciliationStatus != null)
         'reconciliation_status': reconciliationStatus,
       if (notes != null) 'notes': notes,
@@ -5682,6 +5779,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<String?>? categorizationRuleId,
     Value<double?>? categorizationConfidence,
     Value<TransactionFlow>? flow,
+    Value<FlowReason>? flowReason,
+    Value<String?>? transferPairId,
     Value<ReconciliationStatus>? reconciliationStatus,
     Value<String?>? notes,
     Value<DateTime?>? deletedAt,
@@ -5712,6 +5811,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       categorizationConfidence:
           categorizationConfidence ?? this.categorizationConfidence,
       flow: flow ?? this.flow,
+      flowReason: flowReason ?? this.flowReason,
+      transferPairId: transferPairId ?? this.transferPairId,
       reconciliationStatus: reconciliationStatus ?? this.reconciliationStatus,
       notes: notes ?? this.notes,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -5809,6 +5910,14 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
         $TransactionsTable.$converterflow.toSql(flow.value),
       );
     }
+    if (flowReason.present) {
+      map['flow_reason'] = Variable<String>(
+        $TransactionsTable.$converterflowReason.toSql(flowReason.value),
+      );
+    }
+    if (transferPairId.present) {
+      map['transfer_pair_id'] = Variable<String>(transferPairId.value);
+    }
     if (reconciliationStatus.present) {
       map['reconciliation_status'] = Variable<String>(
         $TransactionsTable.$converterreconciliationStatus.toSql(
@@ -5854,6 +5963,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('categorizationRuleId: $categorizationRuleId, ')
           ..write('categorizationConfidence: $categorizationConfidence, ')
           ..write('flow: $flow, ')
+          ..write('flowReason: $flowReason, ')
+          ..write('transferPairId: $transferPairId, ')
           ..write('reconciliationStatus: $reconciliationStatus, ')
           ..write('notes: $notes, ')
           ..write('deletedAt: $deletedAt, ')
@@ -8694,7 +8805,7 @@ class GoalsCompanion extends UpdateCompanion<Goal> {
 }
 
 class $RecurringSeriesTable extends RecurringSeries
-    with TableInfo<$RecurringSeriesTable, RecurringSery> {
+    with TableInfo<$RecurringSeriesTable, RecurringSeriesRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -8825,7 +8936,7 @@ class $RecurringSeriesTable extends RecurringSeries
   static const String $name = 'recurring_series';
   @override
   VerificationContext validateIntegrity(
-    Insertable<RecurringSery> instance, {
+    Insertable<RecurringSeriesRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -8885,9 +8996,9 @@ class $RecurringSeriesTable extends RecurringSeries
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  RecurringSery map(Map<String, dynamic> data, {String? tablePrefix}) {
+  RecurringSeriesRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return RecurringSery(
+    return RecurringSeriesRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -8957,7 +9068,8 @@ class $RecurringSeriesTable extends RecurringSeries
       const WireEnumConverter(SeriesUserState.values);
 }
 
-class RecurringSery extends DataClass implements Insertable<RecurringSery> {
+class RecurringSeriesRow extends DataClass
+    implements Insertable<RecurringSeriesRow> {
   /// UUID v7, created with `newId()`.
   final String id;
   final DateTime createdAt;
@@ -8973,7 +9085,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
   final LocalDate? nextExpectedDate;
   final List<Object?> transactionIds;
   final SeriesUserState userState;
-  const RecurringSery({
+  const RecurringSeriesRow({
     required this.id,
     required this.createdAt,
     required this.updatedAt,
@@ -9036,12 +9148,12 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
     );
   }
 
-  factory RecurringSery.fromJson(
+  factory RecurringSeriesRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return RecurringSery(
+    return RecurringSeriesRow(
       id: serializer.fromJson<String>(json['id']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -9075,7 +9187,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
     };
   }
 
-  RecurringSery copyWith({
+  RecurringSeriesRow copyWith({
     String? id,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -9086,7 +9198,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
     Value<LocalDate?> nextExpectedDate = const Value.absent(),
     List<Object?>? transactionIds,
     SeriesUserState? userState,
-  }) => RecurringSery(
+  }) => RecurringSeriesRow(
     id: id ?? this.id,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -9100,8 +9212,8 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
     transactionIds: transactionIds ?? this.transactionIds,
     userState: userState ?? this.userState,
   );
-  RecurringSery copyWithCompanion(RecurringSeriesCompanion data) {
-    return RecurringSery(
+  RecurringSeriesRow copyWithCompanion(RecurringSeriesCompanion data) {
+    return RecurringSeriesRow(
       id: data.id.present ? data.id.value : this.id,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -9125,7 +9237,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
 
   @override
   String toString() {
-    return (StringBuffer('RecurringSery(')
+    return (StringBuffer('RecurringSeriesRow(')
           ..write('id: $id, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -9156,7 +9268,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is RecurringSery &&
+      (other is RecurringSeriesRow &&
           other.id == this.id &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -9169,7 +9281,7 @@ class RecurringSery extends DataClass implements Insertable<RecurringSery> {
           other.userState == this.userState);
 }
 
-class RecurringSeriesCompanion extends UpdateCompanion<RecurringSery> {
+class RecurringSeriesCompanion extends UpdateCompanion<RecurringSeriesRow> {
   final Value<String> id;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -9214,7 +9326,7 @@ class RecurringSeriesCompanion extends UpdateCompanion<RecurringSery> {
        typicalAmountPaise = Value(typicalAmountPaise),
        transactionIds = Value(transactionIds),
        userState = Value(userState);
-  static Insertable<RecurringSery> custom({
+  static Insertable<RecurringSeriesRow> custom({
     Expression<String>? id,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -11298,7 +11410,7 @@ class PlanExtensionsCompanion extends UpdateCompanion<PlanExtension> {
 }
 
 class $AuditLogTable extends AuditLog
-    with TableInfo<$AuditLogTable, AuditLogData> {
+    with TableInfo<$AuditLogTable, AuditEntry> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -11437,7 +11549,7 @@ class $AuditLogTable extends AuditLog
   static const String $name = 'audit_log';
   @override
   VerificationContext validateIntegrity(
-    Insertable<AuditLogData> instance, {
+    Insertable<AuditEntry> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -11513,9 +11625,9 @@ class $AuditLogTable extends AuditLog
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  AuditLogData map(Map<String, dynamic> data, {String? tablePrefix}) {
+  AuditEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AuditLogData(
+    return AuditEntry(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -11580,7 +11692,7 @@ class $AuditLogTable extends AuditLog
       NullAwareTypeConverter.wrap($converterdiff);
 }
 
-class AuditLogData extends DataClass implements Insertable<AuditLogData> {
+class AuditEntry extends DataClass implements Insertable<AuditEntry> {
   /// UUID v7, created with `newId()`.
   final String id;
   final DateTime createdAt;
@@ -11601,7 +11713,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
   /// Hash of the previous entry (empty for the first), then of this entry.
   final String prevHash;
   final String hash;
-  const AuditLogData({
+  const AuditEntry({
     required this.id,
     required this.createdAt,
     required this.updatedAt,
@@ -11659,12 +11771,12 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
     );
   }
 
-  factory AuditLogData.fromJson(
+  factory AuditEntry.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AuditLogData(
+    return AuditEntry(
       id: serializer.fromJson<String>(json['id']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -11696,7 +11808,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
     };
   }
 
-  AuditLogData copyWith({
+  AuditEntry copyWith({
     String? id,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -11708,7 +11820,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
     Value<Map<String, Object?>?> diff = const Value.absent(),
     String? prevHash,
     String? hash,
-  }) => AuditLogData(
+  }) => AuditEntry(
     id: id ?? this.id,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -11721,8 +11833,8 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
     prevHash: prevHash ?? this.prevHash,
     hash: hash ?? this.hash,
   );
-  AuditLogData copyWithCompanion(AuditLogCompanion data) {
-    return AuditLogData(
+  AuditEntry copyWithCompanion(AuditLogCompanion data) {
+    return AuditEntry(
       id: data.id.present ? data.id.value : this.id,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -11741,7 +11853,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
 
   @override
   String toString() {
-    return (StringBuffer('AuditLogData(')
+    return (StringBuffer('AuditEntry(')
           ..write('id: $id, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -11774,7 +11886,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is AuditLogData &&
+      (other is AuditEntry &&
           other.id == this.id &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -11788,7 +11900,7 @@ class AuditLogData extends DataClass implements Insertable<AuditLogData> {
           other.hash == this.hash);
 }
 
-class AuditLogCompanion extends UpdateCompanion<AuditLogData> {
+class AuditLogCompanion extends UpdateCompanion<AuditEntry> {
   final Value<String> id;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -11836,7 +11948,7 @@ class AuditLogCompanion extends UpdateCompanion<AuditLogData> {
        actor = Value(actor),
        prevHash = Value(prevHash),
        hash = Value(hash);
-  static Insertable<AuditLogData> custom({
+  static Insertable<AuditEntry> custom({
     Expression<String>? id,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -12620,6 +12732,10 @@ abstract class _$FinanceDatabase extends GeneratedDatabase {
     'transactions_amount_date',
     'CREATE INDEX transactions_amount_date ON transactions (amount_paise, local_date)',
   );
+  late final Index transactionsAccountDate = Index(
+    'transactions_account_date',
+    'CREATE INDEX transactions_account_date ON transactions (account_id, local_date)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12647,6 +12763,7 @@ abstract class _$FinanceDatabase extends GeneratedDatabase {
     transactionsCategory,
     transactionsUpiRef,
     transactionsAmountDate,
+    transactionsAccountDate,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -12960,7 +13077,7 @@ final class $$AccountsTableReferences
     extends BaseReferences<_$FinanceDatabase, $AccountsTable, Account> {
   $$AccountsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static MultiTypedResultKey<$ImportBatchesTable, List<ImportBatche>>
+  static MultiTypedResultKey<$ImportBatchesTable, List<ImportBatch>>
   _importBatchesRefsTable(_$FinanceDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.importBatches,
@@ -13394,7 +13511,7 @@ class $$AccountsTableTableManager
                         await $_getPrefetchedData<
                           Account,
                           $AccountsTable,
-                          ImportBatche
+                          ImportBatch
                         >(
                           currentTable: table,
                           referencedTable: $$AccountsTableReferences
@@ -13497,7 +13614,7 @@ typedef $$ImportBatchesTableUpdateCompanionBuilder =
 
 final class $$ImportBatchesTableReferences
     extends
-        BaseReferences<_$FinanceDatabase, $ImportBatchesTable, ImportBatche> {
+        BaseReferences<_$FinanceDatabase, $ImportBatchesTable, ImportBatch> {
   $$ImportBatchesTableReferences(
     super.$_db,
     super.$_table,
@@ -13908,14 +14025,14 @@ class $$ImportBatchesTableTableManager
         RootTableManager<
           _$FinanceDatabase,
           $ImportBatchesTable,
-          ImportBatche,
+          ImportBatch,
           $$ImportBatchesTableFilterComposer,
           $$ImportBatchesTableOrderingComposer,
           $$ImportBatchesTableAnnotationComposer,
           $$ImportBatchesTableCreateCompanionBuilder,
           $$ImportBatchesTableUpdateCompanionBuilder,
-          (ImportBatche, $$ImportBatchesTableReferences),
-          ImportBatche,
+          (ImportBatch, $$ImportBatchesTableReferences),
+          ImportBatch,
           PrefetchHooks Function({bool accountId, bool sourceRecordsRefs})
         > {
   $$ImportBatchesTableTableManager(
@@ -14010,7 +14127,7 @@ class $$ImportBatchesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$ImportBatchesTable, ImportBatche>(table),
+                  e.readTable<$ImportBatchesTable, ImportBatch>(table),
                   $$ImportBatchesTableReferences(db, table, e),
                 ),
               )
@@ -14056,7 +14173,7 @@ class $$ImportBatchesTableTableManager
                     return [
                       if (sourceRecordsRefs)
                         await $_getPrefetchedData<
-                          ImportBatche,
+                          ImportBatch,
                           $ImportBatchesTable,
                           SourceRecord
                         >(
@@ -14087,14 +14204,14 @@ typedef $$ImportBatchesTableProcessedTableManager =
     ProcessedTableManager<
       _$FinanceDatabase,
       $ImportBatchesTable,
-      ImportBatche,
+      ImportBatch,
       $$ImportBatchesTableFilterComposer,
       $$ImportBatchesTableOrderingComposer,
       $$ImportBatchesTableAnnotationComposer,
       $$ImportBatchesTableCreateCompanionBuilder,
       $$ImportBatchesTableUpdateCompanionBuilder,
-      (ImportBatche, $$ImportBatchesTableReferences),
-      ImportBatche,
+      (ImportBatch, $$ImportBatchesTableReferences),
+      ImportBatch,
       PrefetchHooks Function({bool accountId, bool sourceRecordsRefs})
     >;
 typedef $$SourceRecordsTableCreateCompanionBuilder =
@@ -16197,6 +16314,8 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       Value<String?> categorizationRuleId,
       Value<double?> categorizationConfidence,
       required TransactionFlow flow,
+      Value<FlowReason> flowReason,
+      Value<String?> transferPairId,
       required ReconciliationStatus reconciliationStatus,
       Value<String?> notes,
       Value<DateTime?> deletedAt,
@@ -16227,6 +16346,8 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String?> categorizationRuleId,
       Value<double?> categorizationConfidence,
       Value<TransactionFlow> flow,
+      Value<FlowReason> flowReason,
+      Value<String?> transferPairId,
       Value<ReconciliationStatus> reconciliationStatus,
       Value<String?> notes,
       Value<DateTime?> deletedAt,
@@ -16475,6 +16596,17 @@ class $$TransactionsTableFilterComposer
   get flow => $composableBuilder(
     column: $table.flow,
     builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<FlowReason, FlowReason, String>
+  get flowReason => $composableBuilder(
+    column: $table.flowReason,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get transferPairId => $composableBuilder(
+    column: $table.transferPairId,
+    builder: (column) => ColumnFilters(column),
   );
 
   ColumnWithTypeConverterFilters<
@@ -16752,6 +16884,16 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get flowReason => $composableBuilder(
+    column: $table.flowReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transferPairId => $composableBuilder(
+    column: $table.transferPairId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reconciliationStatus => $composableBuilder(
     column: $table.reconciliationStatus,
     builder: (column) => ColumnOrderings(column),
@@ -16923,6 +17065,17 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<TransactionFlow, String> get flow =>
       $composableBuilder(column: $table.flow, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<FlowReason, String> get flowReason =>
+      $composableBuilder(
+        column: $table.flowReason,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get transferPairId => $composableBuilder(
+    column: $table.transferPairId,
+    builder: (column) => column,
+  );
 
   GeneratedColumnWithTypeConverter<ReconciliationStatus, String>
   get reconciliationStatus => $composableBuilder(
@@ -17144,6 +17297,8 @@ class $$TransactionsTableTableManager
                 Value<String?> categorizationRuleId = const Value.absent(),
                 Value<double?> categorizationConfidence = const Value.absent(),
                 Value<TransactionFlow> flow = const Value.absent(),
+                Value<FlowReason> flowReason = const Value.absent(),
+                Value<String?> transferPairId = const Value.absent(),
                 Value<ReconciliationStatus> reconciliationStatus =
                     const Value.absent(),
                 Value<String?> notes = const Value.absent(),
@@ -17173,6 +17328,8 @@ class $$TransactionsTableTableManager
                 categorizationRuleId: categorizationRuleId,
                 categorizationConfidence: categorizationConfidence,
                 flow: flow,
+                flowReason: flowReason,
+                transferPairId: transferPairId,
                 reconciliationStatus: reconciliationStatus,
                 notes: notes,
                 deletedAt: deletedAt,
@@ -17204,6 +17361,8 @@ class $$TransactionsTableTableManager
                 Value<String?> categorizationRuleId = const Value.absent(),
                 Value<double?> categorizationConfidence = const Value.absent(),
                 required TransactionFlow flow,
+                Value<FlowReason> flowReason = const Value.absent(),
+                Value<String?> transferPairId = const Value.absent(),
                 required ReconciliationStatus reconciliationStatus,
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -17232,6 +17391,8 @@ class $$TransactionsTableTableManager
                 categorizationRuleId: categorizationRuleId,
                 categorizationConfidence: categorizationConfidence,
                 flow: flow,
+                flowReason: flowReason,
+                transferPairId: transferPairId,
                 reconciliationStatus: reconciliationStatus,
                 notes: notes,
                 deletedAt: deletedAt,
@@ -19772,21 +19933,21 @@ class $$RecurringSeriesTableTableManager
         RootTableManager<
           _$FinanceDatabase,
           $RecurringSeriesTable,
-          RecurringSery,
+          RecurringSeriesRow,
           $$RecurringSeriesTableFilterComposer,
           $$RecurringSeriesTableOrderingComposer,
           $$RecurringSeriesTableAnnotationComposer,
           $$RecurringSeriesTableCreateCompanionBuilder,
           $$RecurringSeriesTableUpdateCompanionBuilder,
           (
-            RecurringSery,
+            RecurringSeriesRow,
             BaseReferences<
               _$FinanceDatabase,
               $RecurringSeriesTable,
-              RecurringSery
+              RecurringSeriesRow
             >,
           ),
-          RecurringSery,
+          RecurringSeriesRow,
           PrefetchHooks Function()
         > {
   $$RecurringSeriesTableTableManager(
@@ -19857,11 +20018,11 @@ class $$RecurringSeriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$RecurringSeriesTable, RecurringSery>(table),
+                  e.readTable<$RecurringSeriesTable, RecurringSeriesRow>(table),
                   BaseReferences<
                     _$FinanceDatabase,
                     $RecurringSeriesTable,
-                    RecurringSery
+                    RecurringSeriesRow
                   >(db, table, e),
                 ),
               )
@@ -19875,17 +20036,21 @@ typedef $$RecurringSeriesTableProcessedTableManager =
     ProcessedTableManager<
       _$FinanceDatabase,
       $RecurringSeriesTable,
-      RecurringSery,
+      RecurringSeriesRow,
       $$RecurringSeriesTableFilterComposer,
       $$RecurringSeriesTableOrderingComposer,
       $$RecurringSeriesTableAnnotationComposer,
       $$RecurringSeriesTableCreateCompanionBuilder,
       $$RecurringSeriesTableUpdateCompanionBuilder,
       (
-        RecurringSery,
-        BaseReferences<_$FinanceDatabase, $RecurringSeriesTable, RecurringSery>,
+        RecurringSeriesRow,
+        BaseReferences<
+          _$FinanceDatabase,
+          $RecurringSeriesTable,
+          RecurringSeriesRow
+        >,
       ),
-      RecurringSery,
+      RecurringSeriesRow,
       PrefetchHooks Function()
     >;
 typedef $$InsightsTableCreateCompanionBuilder = InsightsCompanion Function({
@@ -21094,17 +21259,17 @@ class $$AuditLogTableTableManager
         RootTableManager<
           _$FinanceDatabase,
           $AuditLogTable,
-          AuditLogData,
+          AuditEntry,
           $$AuditLogTableFilterComposer,
           $$AuditLogTableOrderingComposer,
           $$AuditLogTableAnnotationComposer,
           $$AuditLogTableCreateCompanionBuilder,
           $$AuditLogTableUpdateCompanionBuilder,
           (
-            AuditLogData,
-            BaseReferences<_$FinanceDatabase, $AuditLogTable, AuditLogData>,
+            AuditEntry,
+            BaseReferences<_$FinanceDatabase, $AuditLogTable, AuditEntry>,
           ),
-          AuditLogData,
+          AuditEntry,
           PrefetchHooks Function()
         > {
   $$AuditLogTableTableManager(_$FinanceDatabase db, $AuditLogTable table)
@@ -21177,12 +21342,12 @@ class $$AuditLogTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$AuditLogTable, AuditLogData>(table),
-                  BaseReferences<
-                    _$FinanceDatabase,
-                    $AuditLogTable,
-                    AuditLogData
-                  >(db, table, e),
+                  e.readTable<$AuditLogTable, AuditEntry>(table),
+                  BaseReferences<_$FinanceDatabase, $AuditLogTable, AuditEntry>(
+                    db,
+                    table,
+                    e,
+                  ),
                 ),
               )
               .toList(),
@@ -21195,17 +21360,17 @@ typedef $$AuditLogTableProcessedTableManager =
     ProcessedTableManager<
       _$FinanceDatabase,
       $AuditLogTable,
-      AuditLogData,
+      AuditEntry,
       $$AuditLogTableFilterComposer,
       $$AuditLogTableOrderingComposer,
       $$AuditLogTableAnnotationComposer,
       $$AuditLogTableCreateCompanionBuilder,
       $$AuditLogTableUpdateCompanionBuilder,
       (
-        AuditLogData,
-        BaseReferences<_$FinanceDatabase, $AuditLogTable, AuditLogData>,
+        AuditEntry,
+        BaseReferences<_$FinanceDatabase, $AuditLogTable, AuditEntry>,
       ),
-      AuditLogData,
+      AuditEntry,
       PrefetchHooks Function()
     >;
 typedef $$AiRequestsTableCreateCompanionBuilder = AiRequestsCompanion Function({

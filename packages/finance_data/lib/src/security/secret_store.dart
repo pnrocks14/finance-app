@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -17,6 +18,35 @@ abstract final class SecretKeys {
   static const pinHash = 'pin_hash_v1';
   static const pinFailures = 'pin_failures_v1';
   static const biometricEnabled = 'biometric_enabled_v1';
+  static const statementPasswords = 'statement_pdf_passwords_v1';
+}
+
+/// Passwords of locked statement PDFs that you chose to remember, kept in
+/// the [SecretStore], never in the database. Banks reuse the same password
+/// every month, so remembered ones are tried before asking.
+class StatementPasswords {
+  StatementPasswords(this._store);
+
+  final SecretStore _store;
+
+  /// At most this many are kept, newest first.
+  static const limit = 8;
+
+  Future<List<String>> all() async {
+    final raw = await _store.read(SecretKeys.statementPasswords);
+    if (raw == null) return const [];
+    return (jsonDecode(raw) as List).cast<String>();
+  }
+
+  Future<void> remember(String password) async {
+    final list = [password, ...(await all()).where((p) => p != password)];
+    await _store.write(
+      SecretKeys.statementPasswords,
+      jsonEncode(list.take(limit).toList()),
+    );
+  }
+
+  Future<void> forgetAll() => _store.delete(SecretKeys.statementPasswords);
 }
 
 class FlutterSecretStore implements SecretStore {

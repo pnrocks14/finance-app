@@ -64,20 +64,110 @@ can be generated and tested.
   constant-time compare. After 5 wrong tries the lockout starts at 30 s and doubles
   up to 1 h.
 
-## Main flows (planned)
+## Main flows
 
-### Import and reconcile (phase 2)
+### Statement import (phase 2, built)
 
 ```
-statement CSV/PDF ─┐
-                   ├─▶ parser (per bank) ─▶ source_records (deduped by hash)
-SMS inbox ─────────┘                              │
-                                                  ▼
-                                    matcher: same amount ± date window
-                                    ± reference ─▶ transactions
-                                                  │  (linked via transaction_sources)
-                                                  ▼
-                       unsure matches ─▶ reconciliation_reviews ─▶ user decides
+CSV bytes ─▶ decodeStatementBytes (UTF-8/16, Latin-1) ─▶ parseCsv (delimiter detected)
+          ─▶ detectLayout: header row + bank preset, or the column mapper on screen
+          ─▶ parseStatement: every line after the header becomes a row, an error,
+             a blank, or the footer (nothing is dropped silently)
+          ─▶ checkBalances: the running balance is a checksum (warnings only)
+          ─▶ StatementImporter.preview: how many rows are new
+          ─▶ StatementImporter.import, in one DB transaction:
+               import_batches (counts, errors, period)
+               source_records (one per new row, dedupeHash unique)
+               transactions + transaction_sources (description parsed)
+               detectTransfers over the period ±3 days, across all accounts
+```
+
+- **Parsing is pure Dart** in `finance_core/lib/src/import/`. Presets map header
+  spellings to fields. A bank without a preset falls back to generic header
+  names, then to the column mapper.
+- **Description parser:** turns narrations such as
+  `UPI-SWIGGY-swiggy@ybl-YESB0000001-412233445566-…` into the channel, payee, VPA,
+  UPI ref, bank code and merchant key. It also guesses merchant versus person from
+  the VPA and name.
+- **Dedupe:** `sha256(account | date | direction | amount | normalised description
+  | balance | occurrence)`. The occurrence number keeps two identical rows (two
+  ₹20 chai payments) as two transactions, while re-importing the file reproduces
+  the same hashes.
+- **Flow:** debits are spend and credits are income. Credits that read like a
+  refund or reversal are refunds. Transfer detection then marks transfers:
+  - debit and credit pairs of the same amount across your accounts, within 2 days
+    (and the same UPI reference when both sides have one)
+  - credit card bill payments, including payments to the bank behind one of
+    your cards
+  - payments to your own UPI IDs
+  - self transfers named in a payment app's statement
+
+  `flow_reason` records why, for "see why". A flow set by hand
+  (`flow_reason = user`) is never overwritten.
+- **Report excerpts** mask every run of 5 or more digits except the last 4.
+
+### UPI app statements (phase 2, built)
+
+```
+Google Pay PDF ─▶ PDFium text (pdfrx) ─▶ parseGooglePayText ─┐
+PhonePe CSV ─────────────────────────▶ parsePhonePeCsv ──────┤
+                                                             ▼
+        rows with payee, exact time, UPI ref and instrument ("Kotak … 7890")
+          ─▶ AppStatementImporter.preview: instrument → account suggestions
+          ─▶ import, in one DB transaction:
+               source_records (kind upi_app_row)
+               same UPI ref + direction + amount already in the ledger?
+                 yes: join it (app payee and time, bank account and narration)
+                 no:  new transaction in the instrument's account
+               detectTransfers over the period
+```
+
+- The bank importer joins the other way too, so the import order doesn't
+  matter (ADR 0007).
+- Google Pay's PDF text is read field by field inside each dated entry, so it
+  doesn't depend on the extractor's text order. Its printed totals are a
+  checksum.
+
+### Bank statement PDFs (phase 2, built)
+
+```
+PDF ─▶ open unlocked? ─no─▶ remembered passwords ─no─▶ password step
+                                                      typed, or built from
+                                                      your details
+     ─▶ PDFium text ─▶ Google Pay? ─▶ app statement flow above
+                    ─▶ bank text?  ─▶ parseBankPdfText ─▶ account step ─▶ preview
+```
+
+- **Rows** start at a line beginning with a date (after an optional serial
+  number); following lines without a date are wrapped narration. Page
+  headers and footers are skipped.
+- **Amounts:** the last amount on a row is the balance and the one before
+  it is the transaction. Direction comes from the balance chain, which works
+  for oldest-first and newest-first statements. An opening balance or B/F
+  row seeds the chain. A row whose direction can't be told is reported, not
+  guessed.
+- **Passwords:** `statementPasswordCandidates` builds every published bank
+  rule from what you type (name, date of birth, mobile, customer ID, account
+  number, card digits). The details stay in memory for that attempt only.
+  A password that opens the file is saved in secure storage
+  (`StatementPasswords`, at most 8) when you tick Remember. Nothing about
+  passwords is logged.
+
+### Bank SMS parser (phase 2, used from phase 5)
+
+`parseTransactionSms(sender, body)` turns one SMS into direction, amount,
+channel, account or card digits, payee, VPA, UPI ref, balance or limit and
+date, or returns null. It knows the DLT sender headers of the major banks
+and ignores promotional (`-P`) senders, OTPs, requests, reminders, offers,
+declines, mandates and failed payments (unless refunded). Bold or italic
+Unicode letters some banks use are read as plain text.
+
+### Reconcile with SMS (phase 5)
+
+```
+SMS inbox ─▶ per-sender templates ─▶ source_records (deduped by hash)
+          ─▶ matcher: same amount ± date window ± reference ─▶ existing transaction
+          ─▶ unsure matches ─▶ reconciliation_reviews ─▶ user decides
 ```
 
 ### Categorisation (phase 3), fully on device
