@@ -243,9 +243,8 @@ void main() {
 
     final repo = TransactionsRepository(db);
     Future<List<int>> sorted(TransactionSort sort) async => [
-      for (final t in await repo
-          .watchFiltered(TransactionFilter(sort: sort))
-          .first)
+      for (final t
+          in await repo.watchFiltered(TransactionFilter(sort: sort)).first)
         t.amountPaise ~/ 100,
     ];
     expect(await sorted(TransactionSort.largest), [12, 11, 5, 4]);
