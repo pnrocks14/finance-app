@@ -307,7 +307,8 @@ enum RowProblem {
   zeroAmount('The amount is zero'),
   missingDescription('The description is empty'),
   tooFewColumns('The row has fewer columns than the header'),
-  unknownType('The row is not a payment, a receipt or a transfer');
+  unknownType('The row is not a payment, a receipt or a transfer'),
+  unknownDirection("Couldn't tell whether this was money in or out");
 
   const RowProblem(this.message);
   final String message;

@@ -5,7 +5,9 @@ import 'package:finance_app/features/import/pdf_text.dart';
 import 'package:finance_app/features/import/statement_file_picker.dart';
 import 'package:finance_core/finance_core.dart';
 import 'package:finance_data/finance_data.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'helpers.dart';
 
@@ -56,12 +58,31 @@ class FakePicker implements StatementFilePicker {
 }
 
 class FakePdfText implements PdfTextExtractor {
-  FakePdfText(this.text);
+  FakePdfText(this.text, {this.password});
   final String text;
 
+  /// When set, the PDF opens only with this password.
+  final String? password;
+  final tried = <String?>[];
+
   @override
-  Future<String> extract(List<int> bytes) async => text;
+  Future<String> extract(List<int> bytes, {String? password}) async {
+    tried.add(password);
+    if (this.password != null && password != this.password) {
+      throw const PdfPasswordRequired();
+    }
+    return text;
+  }
 }
+
+// A made-up bank statement as PDF text.
+const _bankPdf = '''
+HDFC BANK Ltd. Statement of account
+Date Narration Chq./Ref.No. Value Dt Withdrawal Amt. Deposit Amt. Closing Balance
+Opening Balance 25,000.00
+01/10/26 UPI-SWIGGY-SWIGGY@YBL-YESB0000001-412233445566 01/10/26 450.00 24,550.00
+02/10/26 NEFT CR-ICIC0000104-ACME TECHNOLOGIES PVT LTD 02/10/26 85,000.00 1,09,550.00
+''';
 
 void main() {
   testWidgets('add an account, import a statement, read the report, see why', (
@@ -181,15 +202,69 @@ void main() {
     expect(accounts.map((a) => a.last4).toSet(), {'7890', '65'});
   });
 
-  testWidgets('a PDF that is not a Google Pay statement is turned away', (
-    tester,
-  ) async {
+  testWidgets('a locked bank PDF asks for its password once', (tester) async {
+    final store = MemorySecretStore();
+    await PinLock(store, iterations: 1000).setPin('4826');
+    final pdf = FakePdfText(_bankPdf, password: 'ASHA0101');
+    final container = testContainer(
+      store,
+      picker: FakePicker('%PDF-1.7', name: 'hdfc.pdf'),
+      pdfText: pdf,
+    );
+    addTearDown(container.dispose);
+    final db = await container.read(databaseProvider.future);
+    await AccountsRepository(db).create(
+      kind: AccountKind.bankAccount,
+      institution: 'HDFC Bank',
+      displayName: 'HDFC Savings',
+    );
+    await pumpApp(tester, container);
+    await typePin(tester, '4826');
+
+    Future<void> choose() async {
+      await tester.tap(find.byTooltip('Import a statement'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose file'));
+      await tester.pumpAndSettle();
+    }
+
+    await choose();
+    expect(find.text('Unlock the PDF'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'wrong');
+    await tester.tap(find.text('Unlock'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("didn't open it"), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'ASHA0101');
+    await tester.tap(find.text('Unlock'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('HDFC Savings'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Looks like HDFC Bank'), findsOneWidget);
+    await tester.tap(find.text('Import 2 transactions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('See transactions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Swiggy'), findsOneWidget);
+
+    // Remembered: the next statement opens without asking.
+    expect(await StatementPasswords(store).all(), ['ASHA0101']);
+    pdf.tried.clear();
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/import');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unlock the PDF'), findsNothing);
+    expect(pdf.tried, [null, 'ASHA0101']);
+  });
+
+  testWidgets('a PDF with no transactions is turned away', (tester) async {
     final store = MemorySecretStore();
     await PinLock(store, iterations: 1000).setPin('4826');
     final container = testContainer(
       store,
-      picker: FakePicker('%PDF-1.7', name: 'bank.pdf'),
-      pdfText: FakePdfText('Statement of account\nOpening balance 100.00'),
+      picker: FakePicker('%PDF-1.7', name: 'letter.pdf'),
+      pdfText: FakePdfText('Dear customer\nThank you'),
     );
     addTearDown(container.dispose);
     await pumpApp(tester, container);
@@ -198,9 +273,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Choose file'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Only Google Pay PDF statements'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('No transactions were found'), findsOneWidget);
   });
 }

@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/data_providers.dart';
+import '../../app/providers.dart';
 import '../../common/format.dart';
 import '../../common/widgets.dart';
 import '../accounts/add_account_sheet.dart';
 import 'app_statement_preview.dart';
 import 'column_mapper.dart';
 import 'import_report.dart';
+import 'pdf_password_step.dart';
 import 'pdf_text.dart';
 import 'statement_file_picker.dart';
 
@@ -29,6 +31,7 @@ class ImportScreen extends ConsumerStatefulWidget {
 enum _Step {
   file,
   reading,
+  password,
   account,
   mapColumns,
   preview,
@@ -45,6 +48,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   List<List<String>> _table = const [];
   ImportPreview? _preview;
   AppImportPreview? _appPreview;
+  PickedStatement? _pdf;
+  StatementParseResult? _pdfResult;
+  String? _passwordError;
   ImportOutcome? _outcome;
   String? _error;
 
@@ -78,33 +84,80 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     setState(() => _step = _Step.account);
   }
 
-  Future<void> _readPdf(PickedStatement file) async {
+  /// Reads a PDF: unlocked, or with a remembered password, or with the
+  /// one you [typed]. A locked PDF with no working password goes to the
+  /// password step.
+  Future<void> _readPdf(
+    PickedStatement file, {
+    String? typed,
+    bool remember = false,
+  }) async {
+    _pdf = file;
     setState(() => _step = _Step.reading);
-    String? text;
-    String? error;
+    final extractor = ref.read(pdfTextExtractorProvider);
+    final passwords = StatementPasswords(ref.read(secretStoreProvider));
+    String text;
     try {
-      text = await ref.read(pdfTextExtractorProvider).extract(file.bytes);
+      if (typed != null) {
+        text = await extractor.extract(file.bytes, password: typed);
+        if (remember) await passwords.remember(typed);
+      } else {
+        text = await _openWithRemembered(extractor, file.bytes, passwords);
+      }
     } on PdfPasswordRequired {
-      error =
-          'That PDF is locked with a password. Password-protected '
-          'statements are coming soon. For now, download a CSV instead.';
-    } on Object {
-      error = "That PDF couldn't be opened.";
-    }
-    if (text != null && !looksLikeGooglePayText(text)) {
-      error =
-          'Only Google Pay PDF statements can be read so far. For a bank '
-          'statement, download it as CSV from net banking.';
-    }
-    if (error != null || text == null) {
       if (!mounted) return;
       setState(() {
-        _error = error;
-        _step = _Step.file;
+        _passwordError = typed == null
+            ? null
+            : "That password didn't open it. Check the hint and try again.";
+        _step = _Step.password;
       });
       return;
+    } on Object {
+      _fail("That PDF couldn't be opened.");
+      return;
     }
-    await _buildAppPreview(parseGooglePayText(text));
+    if (looksLikeGooglePayText(text)) {
+      await _buildAppPreview(parseGooglePayText(text));
+      return;
+    }
+    if (looksLikeBankPdfText(text)) {
+      _pdfResult = parseBankPdfText(text);
+      if (!mounted) return;
+      setState(() => _step = _Step.account);
+      return;
+    }
+    _fail(
+      "No transactions were found in that PDF. If it's a scanned image, "
+      'download the statement as CSV instead.',
+    );
+  }
+
+  Future<String> _openWithRemembered(
+    PdfTextExtractor extractor,
+    List<int> bytes,
+    StatementPasswords passwords,
+  ) async {
+    try {
+      return await extractor.extract(bytes);
+    } on PdfPasswordRequired {
+      for (final p in await passwords.all()) {
+        try {
+          return await extractor.extract(bytes, password: p);
+        } on PdfPasswordRequired {
+          continue;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _error = message;
+      _step = _Step.file;
+    });
   }
 
   Future<void> _buildAppPreview(AppStatementResult result) async {
@@ -126,6 +179,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Future<void> _chooseAccount(Account account) async {
     _account = account;
+    if (_pdfResult != null) {
+      await _previewResult(_pdfResult!);
+      return;
+    }
     final layout = detectLayout(_table);
     if (layout == null) {
       setState(() => _step = _Step.mapColumns);
@@ -145,6 +202,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       });
       return;
     }
+    await _previewResult(result);
+  }
+
+  Future<void> _previewResult(StatementParseResult result) async {
     final importer = await ref.read(statementImporterProvider.future);
     final preview = await importer.preview(
       accountId: _account!.id,
@@ -181,6 +242,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     final outcome = await importer.import(
       accountId: _account!.id,
       result: _preview!.result,
+      kind: _pdfResult == null
+          ? ImportKind.statementCsv
+          : ImportKind.statementPdf,
     );
     if (!mounted) return;
     setState(() {
@@ -193,6 +257,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     _step = _Step.file;
     _preview = null;
     _appPreview = null;
+    _pdf = null;
+    _pdfResult = null;
+    _passwordError = null;
     _outcome = null;
     _text = null;
     _fileName = null;
@@ -204,6 +271,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     final title = switch (_step) {
       _Step.file => 'Import a statement',
       _Step.reading => 'Reading the file',
+      _Step.password => 'Unlock the PDF',
       _Step.account => 'Which account?',
       _Step.mapColumns => 'Match the columns',
       _Step.preview || _Step.appPreview => 'Check before importing',
@@ -217,6 +285,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           _Step.file => _FileStep(error: _error, onPick: _pickFile),
           _Step.reading ||
           _Step.importing => const Center(child: CircularProgressIndicator()),
+          _Step.password => PdfPasswordStep(
+            fileName: _fileName!,
+            error: _passwordError,
+            onUnlock: (password, remember) =>
+                _readPdf(_pdf!, typed: password, remember: remember),
+            onCancel: _startOver,
+          ),
           _Step.account => _AccountStep(
             selected: _account,
             onSelect: _chooseAccount,
@@ -241,9 +316,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           ),
           _Step.report => ImportReport(
             outcome: _outcome!,
-            rowLabel: _appPreview?.result.app == UpiApp.googlePay
-                ? 'Entry'
-                : 'Line',
+            rowLabel: _pdf != null ? 'Entry' : 'Line',
             onDone: () => context.go('/transactions'),
             onImportAnother: _startOver,
           ),
@@ -356,10 +429,11 @@ class _FileStep extends StatelessWidget {
         const SizedBox(height: Space.s),
         const _Source(
           icon: Icons.account_balance_outlined,
-          title: 'Bank statement (CSV)',
+          title: 'Bank statement (CSV or PDF)',
           detail:
-              'In net banking, open your account statement, pick the dates '
-              'and download it as CSV (sometimes called "delimited").',
+              'From net banking or your bank app, download the account '
+              'statement. CSV (sometimes called "delimited") works best. '
+              'PDFs work too, including password-protected ones.',
         ),
         const _Source(
           icon: Icons.qr_code_rounded,

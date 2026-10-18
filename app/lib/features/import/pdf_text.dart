@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:pdfrx/pdfrx.dart';
 
-/// The PDF needs a password before its text can be read.
+/// The PDF is locked and the password given (or none) doesn't open it.
 final class PdfPasswordRequired implements Exception {
   const PdfPasswordRequired();
 }
@@ -10,7 +10,9 @@ final class PdfPasswordRequired implements Exception {
 /// Pulls the text out of a PDF statement. Behind an interface so tests can
 /// supply text without the native PDF engine.
 abstract interface class PdfTextExtractor {
-  Future<String> extract(List<int> bytes);
+  /// Throws [PdfPasswordRequired] when the PDF is locked and [password] is
+  /// missing or wrong.
+  Future<String> extract(List<int> bytes, {String? password});
 }
 
 /// Reads PDFs with PDFium, on the device. Nothing is uploaded.
@@ -18,13 +20,16 @@ class PdfiumTextExtractor implements PdfTextExtractor {
   const PdfiumTextExtractor();
 
   @override
-  Future<String> extract(List<int> bytes) async {
+  Future<String> extract(List<int> bytes, {String? password}) async {
     await pdfrxFlutterInitialize();
     final PdfDocument doc;
     try {
       doc = await PdfDocument.openData(
         Uint8List.fromList(bytes),
         sourceName: 'statement',
+        // Returns the password once, then null, so a wrong one fails
+        // instead of being retried forever.
+        passwordProvider: createSimplePasswordProvider(password),
       );
     } on PdfPasswordException {
       throw const PdfPasswordRequired();
