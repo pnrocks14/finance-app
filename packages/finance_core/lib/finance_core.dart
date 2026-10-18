@@ -19,6 +19,7 @@ export 'src/import/statement_password.dart';
 export 'src/import/statement_pdf.dart';
 export 'src/import/transfers.dart';
 export 'src/import/upi_app_statement.dart';
+export 'src/insights/month_summary.dart';
 export 'src/models/enums.dart';
 export 'src/money/inr_format.dart';
 export 'src/money/paise.dart';

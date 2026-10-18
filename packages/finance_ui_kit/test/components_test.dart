@@ -109,4 +109,44 @@ void main() {
     await tester.tap(find.text('Import'));
     expect(tapped, isTrue);
   });
+
+  testWidgets('SpendCurve compares with last month in words', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        const SizedBox(
+          width: 300,
+          child: SpendCurve(
+            current: [Paise(10000), Paise(30000), Paise(30000)],
+            previous: [Paise(5000), Paise(50000), Paise(60000), Paise(90000)],
+          ),
+        ),
+        theme: FinanceTheme.dark(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(
+        'Spending so far ₹300, last month by this day ₹600',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('DonutLegend rows can be tapped', (tester) async {
+    int? tapped;
+    await tester.pumpWidget(
+      _wrap(
+        DonutLegend(
+          slices: const [
+            DonutSlice(label: 'Food', amount: Paise(100), color: Colors.red),
+            DonutSlice(label: 'Fuel', amount: Paise(300), color: Colors.blue),
+          ],
+          onTap: (i) => tapped = i,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Fuel'));
+    expect(tapped, 1);
+  });
 }

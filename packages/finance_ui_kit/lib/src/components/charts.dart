@@ -236,9 +236,12 @@ class _DonutPainter extends CustomPainter {
 
 /// A legend row for a donut: colour dot, name, amount and share.
 class DonutLegend extends StatelessWidget {
-  const DonutLegend({super.key, required this.slices});
+  const DonutLegend({super.key, required this.slices, this.onTap});
 
   final List<DonutSlice> slices;
+
+  /// Called with the slice's index when a row is tapped.
+  final ValueChanged<int>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -246,39 +249,43 @@ class DonutLegend extends StatelessWidget {
     final total = slices.fold<int>(0, (sum, s) => sum + s.amount.value);
     return Column(
       children: [
-        for (final s in slices)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: Space.xs),
-            child: Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: s.color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: Space.m),
-                Expanded(child: Text(s.label, style: theme.labelMedium)),
-                MoneyText(
-                  s.amount,
-                  style: theme.labelMedium,
-                  paise: PaiseDisplay.never,
-                ),
-                SizedBox(
-                  width: 48,
-                  child: Text(
-                    total == 0
-                        ? ''
-                        : '${(s.amount.value * 100 / total).round()}%',
-                    textAlign: TextAlign.end,
-                    style: theme.bodySmall?.copyWith(
-                      fontFeatures: tabularFigures,
+        for (final (i, s) in slices.indexed)
+          InkWell(
+            borderRadius: BorderRadius.circular(Radii.chip),
+            onTap: onTap == null ? null : () => onTap!(i),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.xs),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: s.color,
+                      shape: BoxShape.circle,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: Space.m),
+                  Expanded(child: Text(s.label, style: theme.labelMedium)),
+                  MoneyText(
+                    s.amount,
+                    style: theme.labelMedium,
+                    paise: PaiseDisplay.never,
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      total == 0
+                          ? ''
+                          : '${(s.amount.value * 100 / total).round()}%',
+                      textAlign: TextAlign.end,
+                      style: theme.bodySmall?.copyWith(
+                        fontFeatures: tabularFigures,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
@@ -371,4 +378,149 @@ class BudgetBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Spending through the month: this month's running total as a line, with
+/// last month's as a faint dashed line to compare against. Each list has
+/// one value per day; [current] may stop early (today).
+class SpendCurve extends StatelessWidget {
+  const SpendCurve({
+    super.key,
+    required this.current,
+    this.previous = const [],
+    this.height = 160,
+  });
+
+  final List<Paise> current;
+  final List<Paise> previous;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final theme = Theme.of(context).textTheme;
+    final top = [
+      ...current,
+      ...previous,
+    ].fold<int>(0, (m, p) => math.max(m, p.value));
+    final now = current.isEmpty ? Paise.zero : current.last;
+    final then = previous.length >= current.length && current.isNotEmpty
+        ? previous[current.length - 1]
+        : null;
+    return Semantics(
+      label:
+          'Spending so far ${formatInr(now)}'
+          '${then == null ? '' : ', last month by this day ${formatInr(then)}'}',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Motion.chart,
+            curve: Motion.curve,
+            builder: (context, t, _) => CustomPaint(
+              size: Size(double.infinity, height),
+              painter: _CurvePainter(
+                current: current,
+                previous: previous,
+                top: top,
+                t: t,
+                line: c.primary,
+                faint: c.textSecondary.withValues(alpha: 0.45),
+                grid: c.surfaceSoft,
+              ),
+            ),
+          ),
+          const SizedBox(height: Space.xs),
+          Row(
+            children: [
+              Text('1', style: theme.bodySmall),
+              const Spacer(),
+              if (previous.isNotEmpty)
+                Text('- - last month', style: theme.bodySmall),
+              const Spacer(),
+              Text(
+                '${math.max(current.length, previous.length)}',
+                style: theme.bodySmall,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CurvePainter extends CustomPainter {
+  _CurvePainter({
+    required this.current,
+    required this.previous,
+    required this.top,
+    required this.t,
+    required this.line,
+    required this.faint,
+    required this.grid,
+  });
+
+  final List<Paise> current;
+  final List<Paise> previous;
+  final int top;
+  final double t;
+  final Color line;
+  final Color faint;
+  final Color grid;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 3; i++) {
+      final y = size.height * i / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+    final days = math.max(current.length, previous.length);
+    if (days < 2 || top <= 0) return;
+    Offset at(int i, Paise p) => Offset(
+      size.width * i / (days - 1),
+      size.height - size.height * (math.max(0, p.value) / top) * t,
+    );
+
+    if (previous.length >= 2) {
+      final paint = Paint()
+        ..color = faint
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      for (var i = 1; i < previous.length; i += 2) {
+        canvas.drawLine(at(i - 1, previous[i - 1]), at(i, previous[i]), paint);
+      }
+    }
+    if (current.isNotEmpty) {
+      final path = Path()..moveTo(at(0, current[0]).dx, at(0, current[0]).dy);
+      for (var i = 1; i < current.length; i++) {
+        final p = at(i, current[i]);
+        path.lineTo(p.dx, p.dy);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = line
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke,
+      );
+      final end = at(current.length - 1, current.last);
+      canvas.drawCircle(end, 5, Paint()..color = line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CurvePainter old) =>
+      old.t != t ||
+      old.top != top ||
+      old.current != current ||
+      old.previous != previous ||
+      old.line != line;
 }
