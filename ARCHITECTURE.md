@@ -128,6 +128,40 @@ PhonePe CSV ──────────────────────�
   doesn't depend on the extractor's text order. Its printed totals are a
   checksum.
 
+### Bank statement PDFs (phase 2, built)
+
+```
+PDF ─▶ open unlocked? ─no─▶ remembered passwords ─no─▶ password step
+                                                      typed, or built from
+                                                      your details
+     ─▶ PDFium text ─▶ Google Pay? ─▶ app statement flow above
+                    ─▶ bank text?  ─▶ parseBankPdfText ─▶ account step ─▶ preview
+```
+
+- **Rows** start at a line beginning with a date (after an optional serial
+  number); following lines without a date are wrapped narration. Page
+  headers and footers are skipped.
+- **Amounts:** the last amount on a row is the balance and the one before
+  it is the transaction. Direction comes from the balance chain, which works
+  for oldest-first and newest-first statements. An opening balance or B/F
+  row seeds the chain. A row whose direction can't be told is reported, not
+  guessed.
+- **Passwords:** `statementPasswordCandidates` builds every published bank
+  rule from what you type (name, date of birth, mobile, customer ID, account
+  number, card digits). The details stay in memory for that attempt only.
+  A password that opens the file is saved in secure storage
+  (`StatementPasswords`, at most 8) when you tick Remember. Nothing about
+  passwords is logged.
+
+### Bank SMS parser (phase 2, used from phase 5)
+
+`parseTransactionSms(sender, body)` turns one SMS into direction, amount,
+channel, account or card digits, payee, VPA, UPI ref, balance or limit and
+date, or returns null. It knows the DLT sender headers of the major banks
+and ignores promotional (`-P`) senders, OTPs, requests, reminders, offers,
+declines, mandates and failed payments (unless refunded). Bold or italic
+Unicode letters some banks use are read as plain text.
+
 ### Reconcile with SMS (phase 5)
 
 ```

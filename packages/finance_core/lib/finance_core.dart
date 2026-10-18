@@ -12,6 +12,7 @@ export 'src/import/description_parser.dart';
 export 'src/import/sms_parser.dart';
 export 'src/import/statement_csv.dart';
 export 'src/import/statement_date.dart';
+export 'src/import/statement_password.dart';
 export 'src/import/statement_pdf.dart';
 export 'src/import/transfers.dart';
 export 'src/import/upi_app_statement.dart';

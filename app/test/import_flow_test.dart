@@ -230,12 +230,18 @@ void main() {
 
     await choose();
     expect(find.text('Unlock the PDF'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'wrong');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'PDF password'),
+      'wrong',
+    );
     await tester.tap(find.text('Unlock'));
     await tester.pumpAndSettle();
     expect(find.textContaining("didn't open it"), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), 'ASHA0101');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'PDF password'),
+      'ASHA0101',
+    );
     await tester.tap(find.text('Unlock'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('HDFC Savings'));
@@ -256,6 +262,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Unlock the PDF'), findsNothing);
     expect(pdf.tried, [null, 'ASHA0101']);
+  });
+
+  testWidgets('a locked PDF opens from your details', (tester) async {
+    final store = MemorySecretStore();
+    await PinLock(store, iterations: 1000).setPin('4826');
+    // Made-up details: ASHA + 05/01 is the Axis-style rule.
+    final pdf = FakePdfText(_bankPdf, password: 'ASHA0501');
+    final container = testContainer(
+      store,
+      picker: FakePicker('%PDF-1.7', name: 'axis.pdf'),
+      pdfText: pdf,
+    );
+    addTearDown(container.dispose);
+    await pumpApp(tester, container);
+    await typePin(tester, '4826');
+    await tester.tap(find.text('Import a statement'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unlock the PDF'), findsOneWidget);
+
+    final tryDetails = find.text('Try my details');
+    final list = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    Future<void> scrollTo(Finder f, double delta) =>
+        tester.scrollUntilVisible(f, delta, scrollable: list);
+    await scrollTo(tryDetails, 200);
+    await tester.tap(tryDetails);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('name and date of birth'), findsOneWidget);
+
+    final name = find.widgetWithText(TextField, 'Name as on the account');
+    await scrollTo(name, -200);
+    await tester.enterText(name, 'Asha Kumar');
+    final dob = find.widgetWithText(TextField, 'Date of birth');
+    await scrollTo(dob, 200);
+    await tester.enterText(dob, '05/01/1990');
+    await scrollTo(tryDetails, 200);
+    await tester.tap(tryDetails);
+    await tester.pumpAndSettle();
+    expect(find.text('Unlock the PDF'), findsNothing);
+    expect(find.text('Add an account'), findsOneWidget);
+    // Only the password that worked is kept, never the details.
+    expect(await StatementPasswords(store).all(), ['ASHA0501']);
   });
 
   testWidgets('a PDF with no transactions is turned away', (tester) async {

@@ -58,6 +58,13 @@ String detectDelimiter(String text) {
   return best;
 }
 
+/// Canara and some other banks write cells as Excel formulas so leading
+/// zeros survive: `="00123"`. The value inside is what matters.
+String _unescapeFormula(String cell) {
+  final m = RegExp(r'^\s*="(.*)"\s*$', dotAll: true).firstMatch(cell);
+  return m == null ? cell : m[1]!.replaceAll('""', '"');
+}
+
 /// Parses delimited text (RFC 4180: quoted fields, doubled quotes, line
 /// breaks inside quotes, CRLF or LF). Returns one list of cells per line,
 /// including blank lines as a single empty cell, so line numbers stay true.
@@ -68,7 +75,7 @@ List<List<String>> parseCsv(String text, {String delimiter = ','}) {
   var inQuotes = false;
   var i = 0;
   void endCell() {
-    row.add(cell.toString());
+    row.add(_unescapeFormula(cell.toString()));
     cell.clear();
   }
 

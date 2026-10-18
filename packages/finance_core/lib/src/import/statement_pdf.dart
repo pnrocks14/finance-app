@@ -155,10 +155,25 @@ StatementParseResult parseBankPdfText(String text) {
 
   final errors = <RowError>[];
   final parsed = <_Parsed>[];
+  Paise? broughtForward;
   for (final e in entries) {
     final joined = e.lines.join(' ');
     final amounts = _money.allMatches(joined).toList();
     final excerpt = redactExcerpt(joined);
+    // ICICI and SBI open the table with a dated "B/F" row that holds only
+    // the opening balance. It is not a transaction.
+    if (amounts.length == 1 &&
+        RegExp(
+          r'\bB/F\b|brought\s*forward|opening\s*balance',
+          caseSensitive: false,
+        ).hasMatch(joined)) {
+      final m = amounts.single;
+      final v = int.parse(m[2]!.replaceAll(',', '')) * 100 + int.parse(m[3]!);
+      broughtForward ??= Paise(
+        m[1] == '-' || m[4]?.toLowerCase() == 'dr' ? -v : v,
+      );
+      continue;
+    }
     if (amounts.length < 2) {
       errors.add(
         RowError(
@@ -230,8 +245,8 @@ StatementParseResult parseBankPdfText(String text) {
   // Directions from the balance chain, in the file's order and reversed;
   // the order that explains more rows wins.
   final opening = _openingBalance.firstMatch(text);
-  Paise? openingBalance;
-  if (opening != null) {
+  var openingBalance = broughtForward;
+  if (opening != null && openingBalance == null) {
     final v = Paise.tryParse(opening[1]!);
     if (v != null) {
       openingBalance = opening[2]?.toLowerCase() == 'dr'

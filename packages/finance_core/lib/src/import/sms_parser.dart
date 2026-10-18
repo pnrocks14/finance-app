@@ -95,19 +95,60 @@ const smsSenders = <String, String>{
   'PAYTMB': 'Paytm Payments Bank',
   'AIRBNK': 'Airtel Payments Bank',
   'ONECRD': 'OneCard',
+  'ONECARD': 'OneCard',
   'SLCEIT': 'Slice',
+  'SLICEIT': 'Slice',
+  'SLCBNK': 'Slice',
   'JUPITR': 'Jupiter',
+  'JTEDGE': 'Jupiter Edge CSB card',
+  'KOTAKD': 'Kotak Mahindra Bank',
+  'HDFCB': 'HDFC Bank',
+  'SBIPSG': 'State Bank of India',
+  'SBIBK': 'State Bank of India',
+  'IDFCBK': 'IDFC First Bank',
+  'INDUSIND': 'IndusInd Bank',
+  'PNBBNK': 'Punjab National Bank',
+  'PUNBN': 'Punjab National Bank',
+  'BOBCRD': 'Bank of Baroda',
+  'UBOI': 'Union Bank of India',
+  'FEDFIB': 'Federal Bank',
+  'FEDSMS': 'Federal Bank',
+  'FEDSCP': 'Federal Bank',
+  'DOPBNK': 'India Post',
 };
 
 /// The bank behind a sender id such as `VM-HDFCBK` or `JD-KOTAKB-S`, or
 /// null for senders that aren't banks.
 String? institutionForSender(String sender) {
-  final parts = sender.toUpperCase().split(RegExp('[^A-Z0-9]'));
+  final upper = sender.toUpperCase();
+  // DLT headers end in -S/-T (service, transactional), -G (government) or
+  // -P (promotional). Promotions are never transactions.
+  if (upper.endsWith('-P')) return null;
+  final parts = upper.split(RegExp('[^A-Z0-9]'));
   for (final p in parts) {
     final bank = smsSenders[p];
     if (bank != null) return bank;
   }
   return null;
+}
+
+/// Maps styled Unicode letters and digits (SBI Card writes `𝗌𝗉𝖾𝗇𝗍`) to
+/// plain ASCII so the patterns below match. A small stand-in for NFKC.
+String plainLetters(String s) {
+  if (!s.runes.any((r) => r >= 0x1D400 && r <= 0x1D7FF)) return s;
+  final out = StringBuffer();
+  for (final r in s.runes) {
+    if (r >= 0x1D400 && r <= 0x1D6A3) {
+      // 13 styles of 52 letters each: A–Z then a–z.
+      final i = (r - 0x1D400) % 52;
+      out.writeCharCode(i < 26 ? 0x41 + i : 0x61 + i - 26);
+    } else if (r >= 0x1D7CE && r <= 0x1D7FF) {
+      out.writeCharCode(0x30 + (r - 0x1D7CE) % 10);
+    } else {
+      out.writeCharCode(r);
+    }
+  }
+  return out.toString();
 }
 
 final _amount = RegExp(
@@ -124,7 +165,8 @@ final _bareAmount = RegExp(
 /// Messages that mention money but are not a transaction that happened:
 /// one-time passwords, requests, reminders, offers and declines.
 final _notATransaction = RegExp(
-  r'(\bOTP\b|one time password|verification code|\bis your\b.*\bcode\b|'
+  r'(\bOTP\b|one.time.password|verification code|\bis your\b.*\bcode\b|'
+  r'bill alert|mandate\b.*\b(received|created|registered|set up)|e-?voucher|\bASBA\b|has avl bal|ignore if already|'
   r'collect request|has requested|requesting|payment request|'
   r'will be debited|will be credited|is due|due date|due on|min(imum)? amt|'
   r'minimum amount due|statement (is )?generated|bill (is )?generated|'
@@ -136,12 +178,13 @@ final _notATransaction = RegExp(
 
 final _debitWords = RegExp(
   r'\b(debited|spent|sent|paid|withdrawn|withdrawal|purchase|deducted|'
-  r'used for|txn of|transferred from|trf to|debit)\b',
+  r'used for|txn of|transferred from|transferred|trf to|debit)\b|'
+  r'\bDr\.(?=\s)',
   caseSensitive: false,
 );
 final _creditWords = RegExp(
   r'\b(credited|received|deposited|refund(ed)?|reversed|reversal|added to|'
-  r'credit)\b',
+  r'credit)\b|\bCr\.?(?=\s+INR)',
   caseSensitive: false,
 );
 
@@ -150,6 +193,9 @@ final _account = RegExp(
   r'[:\s]*[Xx*•.]*\s*(\d{3,6})\b',
   caseSensitive: false,
 );
+
+/// "from XXXXXX1234" with no "A/c" in front (Kotak UPI).
+final _maskedNumber = RegExp(r'\b(?:from|in|to)\s+[Xx*]{2,}(\d{3,6})\b');
 final _card = RegExp(
   r'\bcard\b(?:\s*(?:no\.?|number|ending(?:\s*with)?))?\s*[:\s]*[Xx*•.]*\s*'
   r'(\d{4})\b',
@@ -157,7 +203,7 @@ final _card = RegExp(
 );
 final _vpa = RegExp(r'[A-Za-z0-9._-]{2,256}@[A-Za-z][A-Za-z0-9]{1,64}');
 final _upiRef = RegExp(
-  r'(?:UPI\s*Ref(?:erence)?(?:\s*No)?|UPI|Ref(?:erence)?\s*No|Refno|RRN|'
+  r'(?:UPI\s*Ref(?:erence)?(?:\s*(?:No|ID))?|UPI|Ref(?:erence)?\s*No|Refno|RRN|'
   r'UTR|Ref)[\s.:#-]*(\d{12})(?!\d)',
   caseSensitive: false,
 );
@@ -176,20 +222,29 @@ final _limit = RegExp(
 /// "from ravi@ybl", "; RAVI credited" (ICICI), "Info: SWIGGY".
 final _counterparty = <RegExp>[
   RegExp(
-    r"\b(?:spent|txn|purchase|used)\b.*?\b(?:at|on)\s+([A-Za-z0-9][A-Za-z0-9 &'._*-]{1,40}?)"
-    r'(?=\s*(?:\.|,|\bon\b|\bvia\b|\bRef\b|\bAvl\b|\bCard\b|\bTime\b|$))',
+    r"\b(?:spent|txn|purchase|used)\b.*?\bat\s+([A-Za-z0-9][A-Za-z0-9 &'._*-]{1,40}?)"
+    r'(?=\s*(?:\.|,|;|\bon\b|\bvia\b|\bRef\b|\bAvl\b|\bCard\b|\bTime\b|$))',
+    caseSensitive: false,
+  ),
+  // "spent ... on 05-Jul-26 on SOME SHOP": skip the date and the card.
+  RegExp(
+    r'\b(?:spent|txn|purchase|used)\b.*?\bon\s+'
+    r'(?!\d{1,2}[-/ ]?(?:\d{1,2}|[A-Za-z]{3})\b|your\b|'
+    r'(?:\w+\s+){0,2}(?:credit|debit|bank)\s+card\b)'
+    r"([A-Za-z0-9][A-Za-z0-9 &'._*-]{1,40}?)"
+    r'(?=\s*(?:\.|,|;|\bon\b|\bvia\b|\bRef\b|\bAvl\b|\bCard\b|\bTime\b|$))',
     caseSensitive: false,
   ),
   RegExp(
     r'\b(?:to|towards|trf to|transferred to|paid to)\s+(?!your\b)(?:VPA\s+)?'
     r"([A-Za-z0-9][A-Za-z0-9 &'@._-]{1,40}?)"
-    r'(?=\s*(?:\.|,|\bon\b|\bvia\b|\bRef|\bUPI\b|\bAvl\b|\(|$))',
+    r'(?=\s*(?:\.|,|;|\bon\b|\bvia\b|\bRef|\bUPI\b|\bAvl\b|\(|$))',
     caseSensitive: false,
   ),
   RegExp(
     r'\bfrom\s+(?!your\b|a/c\b|ac\b|account\b)(?:VPA\s+)?'
     r"([A-Za-z0-9][A-Za-z0-9 &'@._-]{1,40}?)"
-    r'(?=\s*(?:\.|,|\bon\b|\bvia\b|\bRef|\bUPI\b|\bAvl\b|\(|$))',
+    r'(?=\s*(?:\.|,|;|\bon\b|\bvia\b|\bRef|\bUPI\b|\bAvl\b|\(|$))',
     caseSensitive: false,
   ),
   RegExp(
@@ -227,7 +282,8 @@ Paise? _money(RegExpMatch? m) => m == null ? null : Paise.tryParse(m[1]!);
 /// that is not money that already moved: OTPs, payment requests, bill
 /// reminders, offers and declined payments. Never throws.
 ParsedSms? parseTransactionSms(String sender, String body) {
-  final text = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (sender.toUpperCase().endsWith('-P')) return null;
+  final text = plainLetters(body).replaceAll(RegExp(r'\s+'), ' ').trim();
   if (_notATransaction.hasMatch(text)) return null;
   // "Txn failed" is not money moving, but "refund of failed txn" is.
   if (RegExp(r'\bfailed\b', caseSensitive: false).hasMatch(text) &&
@@ -300,12 +356,14 @@ ParsedSms? parseTransactionSms(String sender, String body) {
     break;
   }
 
+  final accountMatch =
+      _account.firstMatch(text) ?? _maskedNumber.firstMatch(text);
   return ParsedSms(
     direction: direction,
     amount: amount,
     channel: channel,
     institution: institution,
-    accountLast4: card == null ? (_account.firstMatch(text)?[1]) : null,
+    accountLast4: card == null ? (accountMatch?[1]) : null,
     cardLast4: card,
     counterparty: counterparty,
     vpa: vpa?.toLowerCase(),

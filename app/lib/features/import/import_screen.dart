@@ -51,6 +51,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   PickedStatement? _pdf;
   StatementParseResult? _pdfResult;
   String? _passwordError;
+  String? _detailsError;
+  var _unlocking = false;
   ImportOutcome? _outcome;
   String? _error;
 
@@ -84,39 +86,56 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     setState(() => _step = _Step.account);
   }
 
-  /// Reads a PDF: unlocked, or with a remembered password, or with the
-  /// one you [typed]. A locked PDF with no working password goes to the
-  /// password step.
+  /// Reads a PDF: unlocked, or with a remembered password, or with one of
+  /// the passwords you [typed] (or that were built from your details). A
+  /// locked PDF with no working password goes to the password step.
   Future<void> _readPdf(
     PickedStatement file, {
-    String? typed,
+    List<String>? typed,
     bool remember = false,
   }) async {
     _pdf = file;
-    setState(() => _step = _Step.reading);
+    // Retries stay on the password step so what you typed is kept.
+    setState(() {
+      if (typed == null) {
+        _step = _Step.reading;
+      } else {
+        _unlocking = true;
+      }
+    });
     final extractor = ref.read(pdfTextExtractorProvider);
     final passwords = StatementPasswords(ref.read(secretStoreProvider));
     String text;
     try {
       if (typed != null) {
-        text = await extractor.extract(file.bytes, password: typed);
-        if (remember) await passwords.remember(typed);
+        text = await _openWithAny(extractor, file.bytes, typed, (p) async {
+          if (remember) await passwords.remember(p);
+        });
       } else {
         text = await _openWithRemembered(extractor, file.bytes, passwords);
       }
     } on PdfPasswordRequired {
       if (!mounted) return;
       setState(() {
-        _passwordError = typed == null
+        _unlocking = false;
+        _passwordError = typed?.length == 1
+            ? "That password didn't open it. Check the hint and try again."
+            : null;
+        _detailsError = typed == null || typed.length == 1
             ? null
-            : "That password didn't open it. Check the hint and try again.";
+            : typed.isEmpty
+            ? 'Fill in at least your name and date of birth.'
+            : 'None of the ${typed.length} usual passwords from your details '
+                  'opened it. Check the email the statement came with.';
         _step = _Step.password;
       });
       return;
     } on Object {
+      _unlocking = false;
       _fail("That PDF couldn't be opened.");
       return;
     }
+    _unlocking = false;
     if (looksLikeGooglePayText(text)) {
       await _buildAppPreview(parseGooglePayText(text));
       return;
@@ -131,6 +150,24 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       "No transactions were found in that PDF. If it's a scanned image, "
       'download the statement as CSV instead.',
     );
+  }
+
+  Future<String> _openWithAny(
+    PdfTextExtractor extractor,
+    List<int> bytes,
+    List<String> candidates,
+    Future<void> Function(String) onOpened,
+  ) async {
+    for (final p in candidates) {
+      try {
+        final text = await extractor.extract(bytes, password: p);
+        await onOpened(p);
+        return text;
+      } on PdfPasswordRequired {
+        continue;
+      }
+    }
+    throw const PdfPasswordRequired();
   }
 
   Future<String> _openWithRemembered(
@@ -260,6 +297,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     _pdf = null;
     _pdfResult = null;
     _passwordError = null;
+    _detailsError = null;
     _outcome = null;
     _text = null;
     _fileName = null;
@@ -288,8 +326,15 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           _Step.password => PdfPasswordStep(
             fileName: _fileName!,
             error: _passwordError,
+            detailsError: _detailsError,
+            busy: _unlocking,
             onUnlock: (password, remember) =>
-                _readPdf(_pdf!, typed: password, remember: remember),
+                _readPdf(_pdf!, typed: [password], remember: remember),
+            onTryDetails: (details, remember) => _readPdf(
+              _pdf!,
+              typed: statementPasswordCandidates(details),
+              remember: remember,
+            ),
             onCancel: _startOver,
           ),
           _Step.account => _AccountStep(

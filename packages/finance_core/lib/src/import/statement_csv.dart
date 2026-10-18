@@ -53,6 +53,7 @@ final class StatementPreset {
     required this.institution,
     required this.headers,
     this.footerMarkers = const [],
+    this.signature = const [],
   });
 
   /// Stored as `import_batches.adapter`, e.g. `hdfc_csv`.
@@ -65,6 +66,10 @@ final class StatementPreset {
   /// A row whose first non-empty cell starts with one of these ends the
   /// transaction table (summary blocks, disclaimers).
   final List<String> footerMarkers;
+
+  /// Normalised headers that must all be present, for banks whose columns
+  /// otherwise look like another bank's.
+  final List<String> signature;
 }
 
 /// Lowercase letters and digits only: `Withdrawal Amt.` → `withdrawalamt`.
@@ -72,6 +77,7 @@ String normalizeHeader(String h) =>
     h.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
 
 const _commonFooters = [
+  'legends used', 'legend :', 'branch address', //
   'statement summary', 'opening balance', 'closing balance', //
   'this is a computer generated', 'this is computer generated',
   '***', 'end of statement', 'generated on', 'total', 'grand total',
@@ -88,8 +94,14 @@ const statementPresets = <StatementPreset>[
     headers: {
       StatementField.date: ['date', 'transactiondate', 'txndate'],
       StatementField.description: ['narration', 'description'],
-      StatementField.reference: ['chqrefno', 'refno', 'chequerefno'],
-      StatementField.valueDate: ['valuedt', 'valuedate'],
+      StatementField.reference: [
+        'chqrefno',
+        'refno',
+        'chequerefno',
+        'chqrefnumber',
+      ],
+      // The "delimited" download pads and cuts headers: `Value Dat`.
+      StatementField.valueDate: ['valuedt', 'valuedate', 'valuedat'],
       StatementField.debit: [
         'withdrawalamt',
         'withdrawalamount',
@@ -119,6 +131,21 @@ const statementPresets = <StatementPreset>[
       ],
       StatementField.credit: ['depositamountinr', 'depositamount', 'deposits'],
       StatementField.balance: ['balanceinr', 'balance'],
+    },
+    footerMarkers: _commonFooters,
+  ),
+  StatementPreset(
+    id: 'canara_csv',
+    institution: 'Canara Bank',
+    signature: ['branchcode'],
+    headers: {
+      StatementField.date: ['txndate', 'transactiondate', 'date'],
+      StatementField.valueDate: ['valuedate'],
+      StatementField.reference: ['chequeno', 'chqno'],
+      StatementField.description: ['description', 'narration'],
+      StatementField.debit: ['debit'],
+      StatementField.credit: ['credit'],
+      StatementField.balance: ['balance'],
     },
     footerMarkers: _commonFooters,
   ),
@@ -195,8 +222,21 @@ const _genericHeaders = <StatementField, List<String>>{
     'creditamount',
     'deposits',
   ],
-  StatementField.amount: ['amount', 'transactionamount', 'amountinr'],
-  StatementField.drCr: ['drcr', 'type', 'crdr', 'debitcredit'],
+  StatementField.amount: [
+    'amount',
+    'transactionamount',
+    'amountinr',
+    'amountinrs',
+    'amt',
+  ],
+  StatementField.drCr: [
+    'drcr',
+    'type',
+    'crdr',
+    'debitcredit',
+    'billingamountsign',
+    'transactiontype',
+  ],
   StatementField.balance: [
     'balance',
     'closingbalance',
@@ -252,6 +292,8 @@ DetectedLayout? detectLayout(List<List<String>> rows, {int scanRows = 60}) {
     final row = rows[r];
     if (row.where((c) => c.trim().isNotEmpty).length < 3) continue;
     for (final preset in statementPresets) {
+      final normalized = row.map(normalizeHeader).toSet();
+      if (!preset.signature.every(normalized.contains)) continue;
       final map = _mapHeaders(row, preset.headers);
       if (map.isComplete && map[StatementField.balance] != null) {
         return DetectedLayout(
@@ -444,6 +486,11 @@ StatementParseResult parseStatement(
       continue;
     }
     final first = nonEmpty.first.trim().toLowerCase();
+    // HDFC splits pages with a "**Continue**" row inside the table.
+    if (first.startsWith('**continue')) {
+      blanks++;
+      continue;
+    }
     if (footers.any(first.startsWith)) break;
     // A repeated header (multi-page exports) is skipped, not an error.
     if (normalizeHeader(cells.join()) ==
@@ -493,13 +540,19 @@ StatementParseResult parseStatement(
         errors.add(fail(RowProblem.badAmount));
         continue;
       }
-      final indicator = cols[StatementField.drCr] != null
-          ? _drCr(cell(StatementField.drCr))
-          : RegExp(r'cr\.?$', caseSensitive: false).hasMatch(amountCell)
+      final suffix =
+          RegExp(r'cr\.?$', caseSensitive: false).hasMatch(amountCell)
           ? Direction.credit
           : RegExp(r'dr\.?$', caseSensitive: false).hasMatch(amountCell)
           ? Direction.debit
           : null;
+      // A Dr/Cr column left empty means a debit: card exports such as
+      // ICICI's only mark credits ("CR").
+      final indicator = cols[StatementField.drCr] != null
+          ? _drCr(cell(StatementField.drCr)) ??
+                suffix ??
+                (cell(StatementField.drCr).isEmpty ? Direction.debit : null)
+          : suffix;
       direction =
           indicator ?? (a.value < 0 ? Direction.debit : Direction.credit);
       amount = a.abs();

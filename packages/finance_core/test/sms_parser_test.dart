@@ -138,6 +138,226 @@ void main() {
     }
   });
 
+  group('templates from other banks', () {
+    // (sender, body, direction, amount in paise, expected payee or null,
+    // card or account last digits, UPI ref)
+    final cases = <(String, String, Direction, int, String?, String?, String?)>[
+      (
+        'JD-KOTAKD-S',
+        'Sent Rs.250.00 from XXXXXX1234 to ASHA STORES on 01/07/2026. UPI '
+            'ref no. 611122223333. Not you? Tap https://kotk.in/KOTAKD/x to '
+            'report -Kotak',
+        Direction.debit,
+        25000,
+        'ASHA STORES',
+        '1234',
+        '611122223333',
+      ),
+      (
+        'VM-KOTAKB-S',
+        'Received Rs. 5000.00 on 20-08-26 in your Kotak Bank A/C x1234 by an '
+            'A/C linked to mobile x000. IMPS Ref no 623212017596.',
+        Direction.credit,
+        500000,
+        null,
+        '1234',
+        null,
+      ),
+      (
+        'VM-KOTAKB-S',
+        'INR 499.00 spent on Kotak Credit Card x4321 on 01-Jul-2026 at '
+            'SOME STORE. Avl limit INR 20,000.00 Fraud? https://example.com',
+        Direction.debit,
+        49900,
+        'SOME STORE',
+        '4321',
+        null,
+      ),
+      (
+        'AX-ICICIT-S',
+        'INR 1,250.00 spent using ICICI Bank Card XX4321 on 05-Jul-26 on '
+            'SOME SHOP. Avl Limit: INR 48,750.00.',
+        Direction.debit,
+        125000,
+        'SOME SHOP',
+        '4321',
+        null,
+      ),
+      (
+        'JM-ICICIT-S',
+        'ICICI Bank Account XX123 credited:Rs. 85,000.00 on 02-Oct-26. Info '
+            'NEFT-ICICN52026-ACME LTD. Available Balance is Rs. 1,09,550.00.',
+        Direction.credit,
+        8500000,
+        null,
+        '123',
+        null,
+      ),
+      (
+        'VM-SBICRD-S',
+        'Rs.799.00 spent on your SBI Credit Card ending with 4321 on 03Oct26 '
+            'at SOME MART. Your available limit is Rs.9,201.00.',
+        Direction.debit,
+        79900,
+        'SOME MART',
+        '4321',
+        null,
+      ),
+      (
+        'VM-AXISBK-S',
+        'Spent INR 300.00 / Axis Bank Card no. XX4321 / 05-10-26 10:15:00 IST '
+            '/ SOME CAFE / Avl Limit: INR 9,700.00 / Not you? SMS BLOCK 4321',
+        Direction.debit,
+        30000,
+        null,
+        '4321',
+        null,
+      ),
+      (
+        'VM-IDFCFB-S',
+        'Your A/c XX1234 debited by Rs. 75.00 on 05/10/26; RAVI KUMAR '
+            'credited. RRN 611122223333. Available balance Rs. 925.00. Team '
+            'IDFC FIRST Bank',
+        Direction.debit,
+        7500,
+        'RAVI KUMAR',
+        '1234',
+        '611122223333',
+      ),
+      (
+        'VM-INDUSB-S',
+        'A/c *XX1234 debited by Rs 40.00 towards tea@ybl. RRN: 611122223333. '
+            'Not You? call 18600000000- IndusInd Bank.',
+        Direction.debit,
+        4000,
+        'tea@ybl',
+        '1234',
+        '611122223333',
+      ),
+      (
+        'VM-PNBSMS-S',
+        'Ac XX1234 Credited with Rs.500.00 05-10-2026 10:15:00 thru UPI . '
+            'Aval Bal Rs.1500.00 CR. (UPI Ref ID:611122223333)-PNB',
+        Direction.credit,
+        50000,
+        null,
+        '1234',
+        '611122223333',
+      ),
+      (
+        'VM-BOBTXN-S',
+        'Rs.120.00 Dr. from A/c XX123456 on 05-10-2026. AvlBal:Rs880.00. '
+            'Ref:611122223333 -Bank of Baroda',
+        Direction.debit,
+        12000,
+        null,
+        '123456',
+        '611122223333',
+      ),
+      (
+        'VM-CANBNK-S',
+        'Dear Customer, Acct XXX123 Dr. INR 60.00 on 05/10/26 to SOME STALL; '
+            'UPI: 611122223333; Bal INR 940.00.Not you? SMS BLOCKUPI to '
+            '0000000000-CanaraBank',
+        Direction.debit,
+        6000,
+        'SOME STALL',
+        '123',
+        '611122223333',
+      ),
+      (
+        'VM-FEDBNK-S',
+        'Rs 99.00 debited via UPI on 05-10-2026 10:15:00 to VPA shop@okicici.'
+            'Ref No 611122223333.Small txns?Use UPI Lite!-Federal Bank',
+        Direction.debit,
+        9900,
+        'shop@okicici',
+        null,
+        '611122223333',
+      ),
+      (
+        'VM-JTEDGE-S',
+        'Rs.150.00 debited to your Edge CSB Bank RuPay Credit Card ending '
+            '4321 on 7/8/26, 2:04 PM - (UPI Ref no.611122223333).',
+        Direction.debit,
+        15000,
+        null,
+        '4321',
+        '611122223333',
+      ),
+      (
+        'VM-DOPBNK-G',
+        'Account No. XXXXXXXX1234 CREDIT with amount Rs. 500.00 on '
+            '05-10-2026. Balance: Rs.1500.00. [S123456]',
+        Direction.credit,
+        50000,
+        null,
+        '1234',
+        null,
+      ),
+      (
+        'VM-HDFCBK-S',
+        'Update! INR 85,000.00 deposited in HDFC Bank A/c XX1234 on 02-OCT-26 '
+            'for NEFT Cr-ICIC0000104-ACME LTD-ASHA KUMAR-ICICN520261002.Avl '
+            'bal INR 1,09,550.00. Cheque deposits in A/C are subject to '
+            'clearing',
+        Direction.credit,
+        8500000,
+        null,
+        '1234',
+        null,
+      ),
+      (
+        'AD-ICICIT-S',
+        'Payment of Rs 4,500.00 has been received on your ICICI Bank Credit '
+            'Card XX4321 through Bharat Bill Payment System on 10-OCT-26.',
+        Direction.credit,
+        450000,
+        null,
+        '4321',
+        null,
+      ),
+    ];
+    for (final (sender, body, dir, paise, payee, last, ref) in cases) {
+      test(sender, () {
+        final p = parse(sender, body);
+        expect(p.direction, dir);
+        expect(p.amount, Paise(paise));
+        if (payee != null) expect(p.counterparty, payee);
+        if (last != null) expect(p.cardLast4 ?? p.accountLast4, last);
+        if (ref != null) expect(p.upiRef, ref);
+      });
+    }
+
+    test('styled letters from SBI Card', () {
+      final p = parse(
+        'VM-SBICRD-S',
+        'Rs.200.00 \u{1D5CC}\u{1D5C9}\u{1D5BE}\u{1D5C7}\u{1D5CD} on your SBI '
+            'Credit Card ending with 4321 at SOME SHOP.',
+      );
+      expect(p.direction, Direction.debit);
+      expect(p.counterparty, 'SOME SHOP');
+    });
+
+    test('more messages that are not transactions', () {
+      for (final body in [
+        'Your Amex SafeKey One-Time Password for INR 500.00, at SHOP is 1234.',
+        'Payment of INR 4,500 on Kotak Credit Card xx4321 is due on 15-10-26.',
+        'New Bill Alert: Your electricity bill of Rs.800 is generated.',
+        'Auto Pay HDFC Bank NACH Mandate : Rs.500 received today for '
+            'processing.',
+        'Your A/C XX1234 has Avl BAL of INR 500.00 as on 05-10-26.',
+        'Payment request of INR 200 from RAVI. Ignore if already paid.',
+      ]) {
+        expect(parseTransactionSms('VM-HDFCBK-S', body), isNull, reason: body);
+      }
+      expect(
+        parseTransactionSms('VM-HDFCBK-P', 'Rs.500 credited as cashback!'),
+        isNull,
+      );
+    });
+  });
+
   test('sender ids', () {
     expect(institutionForSender('VM-HDFCBK-S'), 'HDFC Bank');
     expect(institutionForSender('VA-UNTYCC-S'), 'Unity Small Finance Bank');
