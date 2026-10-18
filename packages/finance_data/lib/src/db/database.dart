@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:finance_core/finance_core.dart';
 
+import '../categories/category_service.dart';
 import 'converters.dart';
 import 'tables.dart';
 
@@ -52,6 +53,7 @@ class FinanceDatabase extends _$FinanceDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      await seedCategoryRows(this, DateTime.now().toUtc());
     },
   );
 

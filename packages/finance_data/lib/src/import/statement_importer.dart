@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:finance_core/finance_core.dart';
 
+import '../categories/category_service.dart';
 import '../db/database.dart';
 import 'ledger_links.dart';
 
@@ -16,6 +17,7 @@ final class ImportOutcome {
     required this.errors,
     required this.balanceWarnings,
     required this.transfersMarked,
+    this.needsCategory = 0,
   });
 
   final String batchId;
@@ -28,6 +30,10 @@ final class ImportOutcome {
   final List<RowError> errors;
   final List<BalanceWarning> balanceWarnings;
   final int transfersMarked;
+
+  /// Transactions in the statement's period still without a confident
+  /// category, for the review list.
+  final int needsCategory;
 
   int get failed => errors.length;
 }
@@ -111,14 +117,20 @@ class StatementImporter {
         linked ? matched++ : created++;
       }
 
-      final transfers = result.rows.isEmpty
+      final from = result.periodFrom?.addDays(-transferSearchDays);
+      final to = result.periodTo?.addDays(transferSearchDays);
+      final transfers = from == null || to == null
           ? 0
-          : await markTransfers(
-              _db,
-              result.periodFrom!.addDays(-transferSearchDays),
-              result.periodTo!.addDays(transferSearchDays),
-              now,
-            );
+          : await markTransfers(_db, from, to, now);
+      final categories = CategoryService(_db, clock: _clock);
+      var needsCategory = 0;
+      if (from != null && to != null) {
+        await categories.recategorize(from: from, to: to);
+        needsCategory = await categories.countNeedingCategory(
+          result.periodFrom!,
+          result.periodTo!,
+        );
+      }
 
       await (_db.update(
         _db.importBatches,
@@ -146,6 +158,7 @@ class StatementImporter {
         errors: result.errors,
         balanceWarnings: result.balanceWarnings,
         transfersMarked: transfers,
+        needsCategory: needsCategory,
       );
     });
   }

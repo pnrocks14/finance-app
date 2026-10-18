@@ -32,6 +32,25 @@ final transactionsProvider = StreamProvider<List<Transaction>>((ref) async* {
   yield* repo.watch();
 });
 
+final categoryServiceProvider = FutureProvider<CategoryService>(
+  (ref) async => CategoryService(await ref.watch(databaseProvider.future)),
+);
+
+final categoriesRepositoryProvider = FutureProvider<CategoriesRepository>(
+  (ref) async => CategoriesRepository(await ref.watch(databaseProvider.future)),
+);
+
+final categoriesProvider = StreamProvider<List<Category>>((ref) async* {
+  final repo = await ref.watch(categoriesRepositoryProvider.future);
+  yield* repo.watchAll();
+});
+
+/// Your category rules, newest first.
+final categoryRulesProvider = StreamProvider<List<CategoryRule>>((ref) async* {
+  final repo = await ref.watch(categoriesRepositoryProvider.future);
+  yield* repo.watchRules();
+});
+
 /// Opens the system file picker. Overridden in tests.
 final statementFilePickerProvider = Provider<StatementFilePicker>(
   (ref) => const SystemStatementFilePicker(),

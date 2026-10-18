@@ -170,17 +170,36 @@ SMS inbox ─▶ per-sender templates ─▶ source_records (deduped by hash)
           ─▶ unsure matches ─▶ reconciliation_reviews ─▶ user decides
 ```
 
-### Categorisation (phase 3), fully on device
+### Categorisation (phase 3, built), fully on device
 
-1. **Rules:** the user's own rules (merchant equals, contains, UPI handle, amount
-   range). Always wins.
-2. **Patterns:** a built-in merchant dictionary and regexes.
-3. **Model:** an on-device classifier trained on the user's own corrections
-   (`training_labels`). Below a confidence floor, the transaction is left
-   uncategorised and goes to review.
+```
+import ─▶ markTransfers ─▶ CategoryService.recategorize(period)
+                              Categorizer (finance_core, pure Dart):
+                              1. transfer / card bill  ─▶ transfer categories
+                              2. your rules (priority) ─▶ method rule
+                              3. merchant dictionary on payee + UPI ID,
+                                 then on the narration ─▶ method pattern
+                              4. bank entries, salary, refunds, people
+                              nothing fits ─▶ uncategorised
+change category ─▶ setCategory: manual + training label
+                   "Always for <payee>" ─▶ merchant-key or UPI ID rule
+                                         ─▶ re-run for that payee
+```
 
-Each transaction records `categorization_method` and its confidence, so "why is
-this Food?" can always be answered.
+- **Categories** start from 29 built-in ones with fixed ids (`cat.food_delivery`),
+  added on every database open if missing, so new ones arrive with updates.
+  Each has a spend class (fixed, flexible, income, transfer).
+- **Never overwritten:** a category you set by hand (`categorized_by = manual`).
+- **Rules** are rows in `category_rules` (merchant key, UPI ID, keyword or
+  regex, optionally by direction). A correction updates your existing rule for
+  that payee rather than adding a second one. Deleting a rule re-runs the
+  categoriser on what it had matched.
+- **"See why"** re-runs the categoriser for the transaction on the device and
+  shows the matched rule or word. Guesses below confidence 0.75 (a payee that
+  looks like a person) say so.
+- **Training labels** keep only model features (merchant key, UPI handle,
+  direction, channel), never names, amounts or narration. The on-device model
+  that learns from them is phase 11.
 
 ### AI gateway and consent (phase 5)
 

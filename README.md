@@ -6,7 +6,7 @@ up and categorised on the device, and turn into clear pictures of where the mont
 went. There is no server. AI is used only when you tap a button, and nothing it
 suggests changes your data until you approve it.
 
-Status: **Phase 2** (statement import). Phase 1 built the scaffold, the encrypted
+Status: **Phase 3** (categorisation). Phase 1 built the scaffold, the encrypted
 database, the app lock (PIN plus fingerprint), the design system and a style sheet
 screen. Phase 2 adds CSV statement import with presets for HDFC, ICICI, SBI, Axis
 and Kotak (checked against a real Kotak export), a column mapper for other banks,
@@ -14,7 +14,9 @@ Canara and card-statement variants, text bank statement PDFs (including
 password-protected ones), Google Pay (PDF) and PhonePe (CSV) statements joined
 to bank rows by UPI reference, duplicate protection, transfer detection, an
 import report and a transactions list. A bank SMS parser is ready for phase 5.
-The categoriser, reading SMS, budgets and AI arrive next. The plan lives in
+Phase 3 adds on-device categorisation: 29 starter categories, a built-in
+dictionary of Indian merchants, your own rules made by changing a category,
+and "see why" for every category. Reading SMS, budgets and AI arrive next. The plan lives in
 [the plan doc](https://claude.ai/code/artifact/d641d641-c3c2-44a0-8234-2bcf6671e465).
 
 ## Repository layout

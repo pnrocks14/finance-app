@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../app/data_providers.dart';
 import '../../common/format.dart';
 import '../../common/widgets.dart';
+import '../categories/category_picker.dart';
+import '../categories/category_visuals.dart';
 
 /// Every transaction, newest first, grouped by day. Tap one to see where it
 /// came from and why it counts the way it does.
@@ -19,12 +21,21 @@ class TransactionsScreen extends ConsumerWidget {
     final txs = ref.watch(transactionsProvider);
     final accounts = ref.watch(accountsProvider).value ?? const [];
     final names = {for (final a in accounts) a.id: a.displayName};
+    final categories = {
+      for (final c in ref.watch(categoriesProvider).value ?? const <Category>[])
+        c.id: c,
+    };
     final theme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions'),
         actions: [
+          IconButton(
+            tooltip: 'Your rules',
+            icon: const Icon(Icons.rule_rounded),
+            onPressed: () => context.push('/rules'),
+          ),
           IconButton(
             tooltip: 'Import a statement',
             icon: const Icon(Icons.upload_file_rounded),
@@ -77,6 +88,7 @@ class TransactionsScreen extends ConsumerWidget {
               final Transaction t => TransactionTile(
                 transaction: t,
                 accountName: names[t.accountId],
+                category: categories[t.categoryId],
               ),
               _ => const SizedBox.shrink(),
             },
@@ -87,16 +99,19 @@ class TransactionsScreen extends ConsumerWidget {
   }
 }
 
-/// One row of the list: icon, payee, channel and account, signed amount.
+/// One row of the list: category, payee, channel and account, signed
+/// amount.
 class TransactionTile extends StatelessWidget {
   const TransactionTile({
     super.key,
     required this.transaction,
     this.accountName,
+    this.category,
   });
 
   final Transaction transaction;
   final String? accountName;
+  final Category? category;
 
   @override
   Widget build(BuildContext context) {
@@ -105,25 +120,25 @@ class TransactionTile extends StatelessWidget {
     final theme = Theme.of(context).textTheme;
     final transfer = t.flow == TransactionFlow.transfer;
     final subtitle = [
+      category?.name ?? 'Needs a category',
       channelLabel(t.channel),
-      if (transfer)
-        'Transfer'
-      else if (t.flow == TransactionFlow.refund)
-        'Refund',
       ?accountName,
     ].join(' · ');
     return InkWell(
       borderRadius: BorderRadius.circular(Radii.chip),
-      onTap: () => showTransactionDetail(context, t, accountName),
+      onTap: () => showTransactionDetail(context, t.id, accountName),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Space.s),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: c.surfaceSoft,
-              child: Icon(_iconFor(t), color: c.primary, size: 20),
-            ),
+            if (category case final cat?)
+              CategoryBadge(cat)
+            else
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: c.surfaceSoft,
+                child: Icon(_iconFor(t), color: c.primary, size: 20),
+              ),
             const SizedBox(width: Space.m),
             Expanded(
               child: Column(
@@ -180,17 +195,35 @@ IconData _iconFor(Transaction t) {
   };
 }
 
-/// "See why": the raw description, what was read from it, and why the
-/// transaction counts as spend, income, refund or transfer.
+/// "See why": the category and why, what was read from the statement, and
+/// why the transaction counts as spend, income, refund or transfer. Tap
+/// "Change" to pick another category.
 Future<void> showTransactionDetail(
   BuildContext context,
-  Transaction t,
+  String transactionId,
   String? accountName,
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
-  builder: (context) {
+  builder: (_) =>
+      _TransactionDetail(id: transactionId, accountName: accountName),
+);
+
+class _TransactionDetail extends ConsumerWidget {
+  const _TransactionDetail({required this.id, this.accountName});
+
+  final String id;
+  final String? accountName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final list = ref.watch(transactionsProvider).value ?? const [];
+    final t = list.where((x) => x.id == id).firstOrNull;
+    if (t == null) return const SizedBox(height: 200);
+    final categories = ref.watch(categoriesProvider).value ?? const [];
+    final category = categories.where((c) => c.id == t.categoryId).firstOrNull;
+    final rules = ref.watch(categoryRulesProvider).value ?? const [];
     final theme = Theme.of(context).textTheme;
     final flowLabel = switch (t.flow) {
       TransactionFlow.spend => 'Spending',
@@ -200,13 +233,44 @@ Future<void> showTransactionDetail(
     };
     final facts = <(String, String)>[
       ('Date', formatShortDate(t.localDate)),
-      if (accountName != null) ('Account', accountName),
+      if (accountName != null) ('Account', accountName!),
       ('Paid by', channelLabel(t.channel)),
       if (t.vpa != null) ('UPI ID', t.vpa!),
       if (t.upiRef != null) ('UPI ref', t.upiRef!),
       if (t.bankRef != null) ('Bank ref', t.bankRef!),
       if (t.cardLast4 != null) ('Card', '••${t.cardLast4}'),
     ];
+    final input = categorizeInputOf(t);
+    final canRemember = ruleForCorrection(input) != null;
+
+    Future<void> change() async {
+      final choice = await showCategoryPicker(
+        context,
+        categories: categories,
+        direction: t.direction,
+        currentId: t.categoryId,
+        payee: canRemember ? displayName(t) : null,
+      );
+      if (choice == null) return;
+      final service = await ref.read(categoryServiceProvider.future);
+      final others = await service.setCategory(
+        t.id,
+        choice.categoryId,
+        always: choice.always,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            others == 0
+                ? 'Category changed.'
+                : 'Category changed, and $others more from '
+                      '${displayName(t)} updated too.',
+          ),
+        ),
+      );
+    }
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.6,
@@ -223,6 +287,35 @@ Future<void> showTransactionDetail(
           Text(displayName(t), style: theme.headlineMedium),
           const SizedBox(height: Space.xs),
           SignedAmount(amount: Paise(t.amountPaise), direction: t.direction),
+          SectionHeader(
+            'Category',
+            action: TextButton(onPressed: change, child: const Text('Change')),
+          ),
+          AppCard(
+            soft: true,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (category != null) ...[
+                  CategoryBadge(category),
+                  const SizedBox(width: Space.m),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category?.name ?? 'Needs a category',
+                        style: theme.titleMedium,
+                      ),
+                      const SizedBox(height: Space.xs),
+                      Text(categoryWhy(t, rules), style: theme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SectionHeader('Why it counts this way'),
           AppCard(
             soft: true,
@@ -254,5 +347,30 @@ Future<void> showTransactionDetail(
         ],
       ),
     );
-  },
-);
+  }
+}
+
+/// Why [t] has its category, worked out on the device from your rules and
+/// the built-in dictionary.
+String categoryWhy(Transaction t, List<CategoryRule> rules) {
+  if (t.categorizedBy == CategorizationMethod.manual) return 'You picked this.';
+  final d = Categorizer([
+    for (final r in rules)
+      if (r.enabled)
+        CategoryRuleSpec(
+          id: r.id,
+          type: r.type,
+          match: r.match,
+          categoryId: r.categoryId,
+          priority: r.priority,
+        ),
+  ]).categorize(categorizeInputOf(t));
+  if (d == null || d.categoryId != t.categoryId) {
+    return "Nothing we know matched this payee. Pick a category and we'll "
+        'remember it.';
+  }
+  final guess = d.confidence < categoryReviewBelow
+      ? ' This is a guess, so check it.'
+      : '';
+  return '${d.explain()}$guess';
+}

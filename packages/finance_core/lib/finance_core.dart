@@ -5,6 +5,9 @@
 /// through interfaces that `finance_data` implements.
 library;
 
+export 'src/categories/categorizer.dart';
+export 'src/categories/merchant_dictionary.dart';
+export 'src/categories/seed_categories.dart';
 export 'src/ids.dart';
 export 'src/import/csv_reader.dart';
 export 'src/import/dedupe.dart';
