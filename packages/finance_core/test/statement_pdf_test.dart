@@ -78,10 +78,7 @@ void main() {
   test('Kotak-like: serial numbers, times, newest first', () {
     final r = parseBankPdfText(kotakLike);
     expect(r.layout.preset?.institution, 'Kotak Mahindra Bank');
-    expect(r.rows.map((x) => x.direction), [
-      Direction.debit,
-      Direction.credit,
-    ]);
+    expect(r.rows.map((x) => x.direction), [Direction.debit, Direction.credit]);
     expect(r.rows.first.date, LocalDate(2026, 7, 8));
     expect(r.rows.first.balance, Paise(168000));
     expect(parseDescription(r.rows.first.description).upiRef, '633344445555');
